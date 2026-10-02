@@ -6,29 +6,58 @@ import {
   BookOpen, 
   Columns2, 
   FileText, 
-  Type, 
-  Palette, 
   Sparkles, 
   Clock, 
   Calendar, 
   Share2, 
   Check, 
-  Bookmark,
-  Volume2
+  Volume2,
+  Maximize2,
+  Minimize2,
+  Sun,
+  Moon,
+  Compass
 } from "lucide-react";
-import { autoPaginateContent, parseLyrics } from "../utils/googleDrive";
+import { autoPaginateContent, parseLyrics, normalizeGoogleDriveImageUrl } from "../utils/googleDrive";
 
 /**
  * Parses and formats story content with literary typography:
- * - Highlights character dialogue cues (Shiki, Mana, Uncle, etc.)
- * - Styles scene markers and whiteboard notes ([Dream 1], WHITEBOARD, etc.)
- * - Formats standard literary paragraphs with drop caps
+ * - Highlights character dialogue cues (Chihara, Shiki, Mana, Uncle, etc.)
+ * - Styles stage directions & breathing pauses (*Takes a breath*, etc.)
+ * - Formats scene markers (*This Video was playing at her funeral*, etc.)
+ * - Highlights philosophical conclusions and literary drop caps
  */
 function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, accentColor = "#d97746") {
   if (!text) return null;
   const trimmed = text.trim();
 
-  // 1. Scene Markers & Flashback Headers e.g. [Dream 1], [Scene shifts into flashback]
+  // 1. Philosophical / Inspirational Closing Callouts (e.g. "Sometimes in the darkest of places...", "Love has no bounds...")
+  if (
+    trimmed.startsWith("Sometimes in the darkest of places") ||
+    trimmed.startsWith("Love has no bounds") ||
+    trimmed.startsWith("In the face of a broken world")
+  ) {
+    return (
+      <blockquote 
+        key={index}
+        className="my-6 p-5 sm:p-6 rounded-2xl border-l-4 shadow-sm text-left transition-all leading-relaxed font-serif italic text-base sm:text-lg"
+        style={{
+          borderColor: accentColor,
+          backgroundColor: `${accentColor}12`
+        }}
+      >
+        <div className="flex items-center gap-2 mb-2 font-mono text-xs uppercase tracking-widest font-bold not-italic" style={{ color: accentColor }}>
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Reflections & Epilogue</span>
+        </div>
+        <p className="opacity-95 leading-relaxed">
+          "{trimmed}"
+        </p>
+      </blockquote>
+    );
+  }
+
+  // 2. Whiteboard Headers & Major Bracketed Scenes [Dream 1], WHITEBOARD — ...
   if (/^\[.+\]$/.test(trimmed) || trimmed.startsWith("WHITEBOARD —")) {
     return (
       <div 
@@ -47,52 +76,122 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
     );
   }
 
-  // 2. Whiteboard bullet lists
+  // 3. Narrative Scene Cues in Asterisks (e.g. *This Video was playing at her funeral*, *Her mother clutched a photo frame...*)
+  if (
+    trimmed.startsWith("*This Video") ||
+    trimmed.startsWith("*Her mother") ||
+    trimmed.startsWith("*Her friends") ||
+    trimmed.startsWith("*Bruno") ||
+    trimmed.startsWith("*The room fell silent") ||
+    trimmed.startsWith("*Chihara pauses") ||
+    trimmed.startsWith("*Chihara smiles")
+  ) {
+    const cleanScene = trimmed.replace(/^[*]+|[*”"]+$/g, "").trim();
+    return (
+      <div 
+        key={index}
+        className="my-4 p-3.5 sm:p-4 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/5 text-left font-serif italic text-sm sm:text-base leading-relaxed opacity-90 text-[#303030] dark:text-[#e0e2ec]"
+      >
+        <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider font-bold text-amber-700 dark:text-amber-400 not-italic mb-1">
+          <span>Scene Atmosphere</span>
+        </div>
+        <p>{cleanScene}</p>
+      </div>
+    );
+  }
+
+  // 4. Subtle Stage Directions & Breathing Pauses (e.g. *Takes a breath*, *smiles*, *Went silent for a while*)
+  if (
+    /^\*.*[\*”"]$/.test(trimmed) ||
+    trimmed.startsWith("*Takes a") ||
+    trimmed.startsWith("*Took a") ||
+    trimmed.startsWith("*went silent") ||
+    trimmed.startsWith("*She went") ||
+    trimmed.startsWith("*Hint of") ||
+    trimmed.startsWith("*A genuine") ||
+    trimmed.startsWith("*smiling") ||
+    trimmed.startsWith("*sniff*")
+  ) {
+    const cleanDirection = trimmed.replace(/^[*]+|[*”"]+$/g, "").trim();
+    return (
+      <div key={index} className="my-2.5 py-0.5 text-xs font-mono italic opacity-70 flex items-center gap-2 text-amber-700 dark:text-amber-300">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500/70 shrink-0" />
+        <span>{cleanDirection}</span>
+      </div>
+    );
+  }
+
+  // 5. Whiteboard Bullet Points
   if (trimmed.startsWith("• ") || trimmed.startsWith("- ")) {
     return (
-      <div key={index} className="flex items-start gap-2.5 my-1.5 pl-3 font-mono text-xs sm:text-sm leading-relaxed opacity-90">
+      <div key={index} className="flex items-start gap-2.5 my-2 pl-3 font-mono text-xs sm:text-sm leading-relaxed opacity-90 text-left">
         <span className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: accentColor }} />
         <span>{trimmed.replace(/^[•-]\s*/, "")}</span>
       </div>
     );
   }
 
-  // 3. Dialogue Identification: Character Name (emotion/action): Dialogue
-  const dialogueMatch = trimmed.match(/^([A-Za-z0-9_?]{1,12}(?:\s*\([^)]*\))?)\s*:\s*([\s\S]+)$/);
+  // 6. Character Dialogue Identification
+  // Supports:
+  // - "Chihara: send help"
+  // - "Chihara:(bit of cracking) please…"
+  // - "Chihara(pitiful voice): and that was it.."
+  // - "Chihara (calm voice): It's the stillness..."
+  // - "A??(In a stoic manner): Hello,"
+  // - "??:Hello."
+  // - "Shiki (nerdy): Did you know..."
+  const dialogueRegex = /^([A-Za-z0-9_?*]{1,15})(?:\s*\(([^)]*)\))?\s*:\s*(?:\(([^)]*)\))?\s*([\s\S]*)$/;
+  const dialogueMatch = trimmed.match(dialogueRegex);
+
   if (dialogueMatch) {
-    const rawSpeaker = dialogueMatch[1].trim();
-    const speech = dialogueMatch[2].trim();
+    const speaker = dialogueMatch[1].trim();
+    const emotion = (dialogueMatch[2] || dialogueMatch[3] || "").trim();
+    const speech = dialogueMatch[4].trim();
 
-    // Determine speaker theme
-    const isShiki = /shiki/i.test(rawSpeaker);
-    const isMana = /mana/i.test(rawSpeaker);
-    const isUncle = /uncle/i.test(rawSpeaker);
+    // Determine speaker character theme
+    const isChihara = /chihara/i.test(speaker);
+    const isShiki = /shiki/i.test(speaker);
+    const isMana = /mana/i.test(speaker);
+    const isUncle = /uncle/i.test(speaker);
 
-    let speakerBg = "bg-stone-500/15 border-stone-500/30 text-stone-700 dark:text-stone-300";
-    if (isShiki) speakerBg = "bg-sky-500/15 border-sky-500/35 text-sky-700 dark:text-sky-300";
-    else if (isMana) speakerBg = "bg-amber-500/15 border-amber-500/35 text-amber-700 dark:text-amber-300";
-    else if (isUncle) speakerBg = "bg-purple-500/15 border-purple-500/35 text-purple-700 dark:text-purple-300";
+    let speakerClass = "bg-stone-500/15 border-stone-500/35 text-stone-800 dark:text-stone-300";
+    if (isChihara) {
+      speakerClass = "bg-cyan-500/15 border-cyan-500/35 text-cyan-800 dark:text-cyan-300 font-bold";
+    } else if (isShiki) {
+      speakerClass = "bg-sky-500/15 border-sky-500/35 text-sky-800 dark:text-sky-300 font-bold";
+    } else if (isMana) {
+      speakerClass = "bg-amber-500/15 border-amber-500/35 text-amber-800 dark:text-amber-300 font-bold";
+    } else if (isUncle) {
+      speakerClass = "bg-purple-500/15 border-purple-500/35 text-purple-800 dark:text-purple-300 font-bold";
+    }
 
     return (
-      <div key={index} className="my-3.5 pl-2 sm:pl-3 border-l-2 border-black/10 dark:border-white/10 text-left">
-        <div className="flex items-center gap-2 mb-1">
-          <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold uppercase tracking-wider border ${speakerBg}`}>
-            {rawSpeaker}
+      <div key={index} className="my-3.5 pl-3 sm:pl-4 border-l-2 border-black/10 dark:border-white/10 text-left transition-colors">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <span className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-mono uppercase tracking-wider border ${speakerClass}`}>
+            {speaker}
           </span>
+          {emotion && (
+            <span className="text-[11px] font-mono italic opacity-75 text-[#6e6862] dark:text-[#a9a5b8]">
+              ({emotion})
+            </span>
+          )}
         </div>
-        <p className="font-serif leading-relaxed text-sm sm:text-base opacity-95">
+        <p className="font-serif leading-relaxed text-sm sm:text-base opacity-95 text-[#202020] dark:text-[#f3f2f7]">
           {speech}
         </p>
       </div>
     );
   }
 
-  // 4. Standard literary paragraph
+  // 7. Standard Literary Prose Paragraph
   return (
     <p 
       key={index} 
-      className={`leading-relaxed my-3 font-serif text-justify ${
-        isFirstOfChapter && index === 0 ? "first-letter:text-3xl first-letter:font-bold first-letter:mr-1 first-letter:float-left" : ""
+      className={`leading-relaxed my-3 font-serif text-justify text-[#202020] dark:text-[#f3f2f7] ${
+        isFirstOfChapter && index === 0 
+          ? "first-letter:text-3xl first-letter:font-bold first-letter:mr-1 first-letter:float-left first-letter:leading-none" 
+          : ""
       }`}
     >
       {trimmed}
@@ -102,34 +201,50 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
 
 export function StoryBookReaderModal({ article, isOpen, onClose }) {
   const [currentPage, setCurrentPage] = useState(0);
-  const [readerMode, setReaderMode] = useState("spread"); // "spread" (2-page on desktop) | "single" (1-page)
+  const [readerMode, setReaderMode] = useState("spread"); // "spread" | "single"
   const [fontSize, setFontSize] = useState("normal"); // "small" | "normal" | "large"
-  const [themeMode, setThemeMode] = useState("parchment"); // "parchment" | "obsidian" | "sepia"
-  const [copied, setCopied] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSummaryBanner, setShowSummaryBanner] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Sync default reading theme with global site dark/light mode
+  const [themeMode, setThemeMode] = useState(() => {
+    if (typeof document !== "undefined" && document.documentElement.classList.contains("dark")) {
+      return "obsidian";
+    }
+    return "light";
+  });
 
   const touchStartXRef = useRef(null);
   const modalRef = useRef(null);
 
-  // Reset to page 0 whenever article changes
+  // Update themeMode whenever modal opens or site theme shifts
   useEffect(() => {
-    setCurrentPage(0);
-    setShowSummaryBanner(false);
-  }, [article?.id]);
+    if (isOpen) {
+      const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+      setThemeMode(isDark ? "obsidian" : "light");
+      setCurrentPage(0);
+      setShowSummaryBanner(false);
+    }
+  }, [isOpen, article?.id]);
 
   // Extract or synthesize pages (using intelligent auto-pagination for Google Sheets & raw text)
   const pages = article?.pages && article.pages.length > 0 
     ? article.pages 
     : autoPaginateContent(article?.title, article?.subtitle, article?.content || article?.excerpt || "");
 
-  const totalPages = pages.length;
+  const totalPages = Math.max(1, pages.length);
 
   // Keyboard navigation for turning pages
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!isOpen) return;
       if (e.key === "Escape") {
-        onClose();
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        } else {
+          onClose();
+        }
       } else if (e.key === "ArrowLeft") {
         handlePrevPage();
       } else if (e.key === "ArrowRight") {
@@ -138,7 +253,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, currentPage, totalPages, readerMode]);
+  }, [isOpen, currentPage, totalPages, readerMode, isFullscreen]);
 
   if (!isOpen || !article) return null;
 
@@ -167,9 +282,9 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
     if (touchStartXRef.current === null) return;
     const diff = e.changedTouches[0].clientX - touchStartXRef.current;
     if (diff > 50) {
-      handleNextPage(); // Swipe Left -> Next
+      handleNextPage();
     } else if (diff < -50) {
-      handlePrevPage(); // Swipe Right -> Prev
+      handlePrevPage();
     }
     touchStartXRef.current = null;
   };
@@ -182,27 +297,25 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
     }
   };
 
-  // Theme styling definitions
+  // Theme styling definitions (Fully supported Light & Dark Mode)
   const themeStyles = {
-    parchment: {
-      bg: "bg-[#fbf8f1]",
-      border: "border-[#e5ded0]",
-      textPrimary: "text-[#2b2723]",
-      textSecondary: "text-[#6e6862]",
-      pageBg: "bg-[#fdfbf7]",
-      gutterShadow: "shadow-[inset_0_0_25px_rgba(110,85,60,0.08)]",
-      divider: "border-[#e8e2d5]",
-      accentBadge: "bg-[#8b5a2b]/10 text-[#8b5a2b] border-[#8b5a2b]/20"
+    light: {
+      bg: "bg-[#f8f6f0]",
+      border: "border-[#dbd2c4]",
+      textPrimary: "text-[#1c1917]",
+      textSecondary: "text-[#5e5953]",
+      pageBg: "bg-[#ffffff]",
+      gutterShadow: "shadow-[inset_0_0_25px_rgba(110,85,60,0.06)]",
+      divider: "border-[#e6dfd3]"
     },
     obsidian: {
-      bg: "bg-[#0f1118]",
-      border: "border-[#242938]",
-      textPrimary: "text-[#e8eaf2]",
-      textSecondary: "text-[#8e94a8]",
+      bg: "bg-[#0e1017]",
+      border: "border-[#262a3a]",
+      textPrimary: "text-[#f3f2f7]",
+      textSecondary: "text-[#a9a5b8]",
       pageBg: "bg-[#141722]",
-      gutterShadow: "shadow-[inset_0_0_30px_rgba(0,0,0,0.65)]",
-      divider: "border-[#252b3d]",
-      accentBadge: "bg-[#38bdf8]/15 text-[#38bdf8] border-[#38bdf8]/30"
+      gutterShadow: "shadow-[inset_0_0_30px_rgba(0,0,0,0.7)]",
+      divider: "border-[#252838]"
     },
     sepia: {
       bg: "bg-[#1c1714]",
@@ -211,12 +324,11 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
       textSecondary: "text-[#a49688]",
       pageBg: "bg-[#231e1a]",
       gutterShadow: "shadow-[inset_0_0_25px_rgba(0,0,0,0.55)]",
-      divider: "border-[#3a3029]",
-      accentBadge: "bg-[#e5a953]/15 text-[#e5a953] border-[#e5a953]/30"
+      divider: "border-[#3a3029]"
     }
   };
 
-  const currentTheme = themeStyles[themeMode] || themeStyles.parchment;
+  const currentTheme = themeStyles[themeMode] || themeStyles.light;
 
   // Font size classes
   const fontSizes = {
@@ -232,28 +344,35 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
   const rightPageData = rightPageIndex !== null ? pages[rightPageIndex] : null;
 
   const readingProgress = Math.round(((leftPageIndex + 1) / totalPages) * 100);
+  const coverImageSrc = normalizeGoogleDriveImageUrl(article.coverImage);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 select-text"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-0 ${
+        isFullscreen ? "sm:p-0" : "sm:p-2 lg:p-4"
+      } bg-black/85 backdrop-blur-md animate-in fade-in duration-200 select-text`}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !isFullscreen) onClose();
       }}
     >
-      {/* Main Hardcover Book Container */}
+      {/* Main Hardcover Book Container — Maximized Widescreen Dimensions */}
       <div 
         ref={modalRef}
-        className={`relative w-full max-w-6xl h-[94vh] sm:h-[90vh] rounded-[24px] sm:rounded-[32px] border ${currentTheme.border} ${currentTheme.bg} shadow-2xl flex flex-col overflow-hidden transition-colors duration-300`}
+        className={`relative w-full ${
+          isFullscreen 
+            ? "h-screen w-screen rounded-none border-0" 
+            : "max-w-[98vw] 2xl:max-w-[1720px] h-[98vh] sm:h-[94vh] rounded-[18px] sm:rounded-[28px] border"
+        } ${currentTheme.border} ${currentTheme.bg} shadow-2xl flex flex-col overflow-hidden transition-all duration-300`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
         {/* Top Reading Control Ribbon */}
-        <header className={`px-4 sm:px-6 py-3 border-b ${currentTheme.divider} flex items-center justify-between gap-3 shrink-0 ${currentTheme.bg} z-20`}>
+        <header className={`px-4 sm:px-6 lg:px-8 py-3 border-b ${currentTheme.divider} flex items-center justify-between gap-3 shrink-0 ${currentTheme.bg} z-20`}>
           
           {/* Left: Book Meta Info */}
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             <span 
-              className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider font-bold border shrink-0`}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider font-bold border shrink-0"
               style={{
                 backgroundColor: `${article.accentColor}18`,
                 borderColor: `${article.accentColor}40`,
@@ -264,7 +383,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
             </span>
 
             <div className="min-w-0">
-              <h2 className={`font-serif text-sm sm:text-base font-medium truncate ${currentTheme.textPrimary}`}>
+              <h2 className={`font-serif text-sm sm:text-base lg:text-lg font-medium truncate ${currentTheme.textPrimary}`}>
                 {article.title}
               </h2>
               <p className={`text-[11px] font-mono truncate hidden sm:block ${currentTheme.textSecondary}`}>
@@ -273,13 +392,13 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Right: Reader Options (Font, Theme, Mode, Close) */}
+          {/* Right: Reader Options (Fullscreen, Mode, Font, Theme, Close) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             
             {/* Summary Lyric Preview Toggle */}
             <button
               onClick={() => setShowSummaryBanner((prev) => !prev)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-mono flex items-center gap-1.5 border transition-all cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 border transition-all cursor-pointer ${
                 showSummaryBanner 
                   ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40" 
                   : `${currentTheme.textSecondary} hover:${currentTheme.textPrimary} border-transparent`
@@ -290,7 +409,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
               <span className="hidden md:inline">Summary Beats</span>
             </button>
 
-            {/* Reading Mode Switcher (Spread vs Single) - Desktop only */}
+            {/* Reading Mode Switcher (Spread vs Single) - Desktop */}
             <div className="hidden lg:flex items-center p-0.5 rounded-lg border border-black/10 dark:border-white/10">
               <button
                 onClick={() => setReaderMode("single")}
@@ -299,7 +418,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
                 }`}
                 title="Single Page View"
               >
-                <FileText className={`w-3.5 h-3.5 ${currentTheme.textPrimary}`} />
+                <FileText className={`w-4 h-4 ${currentTheme.textPrimary}`} />
               </button>
               <button
                 onClick={() => setReaderMode("spread")}
@@ -308,7 +427,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
                 }`}
                 title="Two-Page Book Spread View"
               >
-                <Columns2 className={`w-3.5 h-3.5 ${currentTheme.textPrimary}`} />
+                <Columns2 className={`w-4 h-4 ${currentTheme.textPrimary}`} />
               </button>
             </div>
 
@@ -343,41 +462,56 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
               </button>
             </div>
 
-            {/* Theme Selector (Parchment, Obsidian, Sepia) */}
+            {/* Theme Selector (Light, Obsidian, Sepia) */}
             <div className="flex items-center gap-1 pl-1">
               <button
-                onClick={() => setThemeMode("parchment")}
-                className={`w-5 h-5 rounded-full border transition-all cursor-pointer ${
-                  themeMode === "parchment" ? "ring-2 ring-amber-600 scale-110" : "opacity-60 hover:opacity-100"
-                } bg-[#fbf8f1] border-[#d8d0c0]`}
-                title="Parchment Paper"
-              />
+                onClick={() => setThemeMode("light")}
+                className={`w-6 h-6 rounded-full border transition-all flex items-center justify-center cursor-pointer ${
+                  themeMode === "light" ? "ring-2 ring-amber-600 scale-110" : "opacity-60 hover:opacity-100"
+                } bg-[#faf8f4] border-[#dbd2c4] text-[#1c1917]`}
+                title="Light Mode Paper"
+              >
+                <Sun className="w-3 h-3 text-amber-600" />
+              </button>
               <button
                 onClick={() => setThemeMode("obsidian")}
-                className={`w-5 h-5 rounded-full border transition-all cursor-pointer ${
+                className={`w-6 h-6 rounded-full border transition-all flex items-center justify-center cursor-pointer ${
                   themeMode === "obsidian" ? "ring-2 ring-sky-400 scale-110" : "opacity-60 hover:opacity-100"
-                } bg-[#0f1118] border-[#31374a]`}
-                title="Obsidian Night"
-              />
+                } bg-[#0e1017] border-[#2c3245] text-white`}
+                title="Dark Mode Obsidian"
+              >
+                <Moon className="w-3 h-3 text-sky-400" />
+              </button>
               <button
                 onClick={() => setThemeMode("sepia")}
-                className={`w-5 h-5 rounded-full border transition-all cursor-pointer ${
+                className={`w-6 h-6 rounded-full border transition-all flex items-center justify-center cursor-pointer ${
                   themeMode === "sepia" ? "ring-2 ring-amber-400 scale-110" : "opacity-60 hover:opacity-100"
-                } bg-[#231e1a] border-[#4a3e35]`}
+                } bg-[#231e1a] border-[#4a3e35] text-amber-300`}
                 title="Warm Sepia"
-              />
+              >
+                <span className="text-[10px] font-serif font-bold">S</span>
+              </button>
             </div>
 
-            {/* Copy Share Link */}
+            {/* Fullscreen Toggle (Maximize all space) */}
+            <button
+              onClick={() => setIsFullscreen((prev) => !prev)}
+              className={`p-1.5 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer ${currentTheme.textSecondary}`}
+              title={isFullscreen ? "Exit Fullscreen" : "Maximize Space (Fullscreen)"}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+
+            {/* Share Link */}
             <button
               onClick={handleCopyLink}
               className={`p-1.5 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer ${currentTheme.textSecondary}`}
-              title="Share story"
+              title="Share story link"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
             </button>
 
-            {/* Close Modal Button */}
+            {/* Close Button */}
             <button
               onClick={onClose}
               className={`p-1.5 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all cursor-pointer ${currentTheme.textPrimary}`}
@@ -417,11 +551,11 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
           </div>
         )}
 
-        {/* Central Book Body / Spread Area */}
+        {/* Central Book Body / Spread Area — Fills Viewport */}
         <div className="flex-1 overflow-hidden relative flex">
           
           {/* Left Page (Always visible) */}
-          <div className={`flex-1 flex flex-col overflow-y-auto px-6 sm:px-10 lg:px-14 py-6 sm:py-8 ${currentTheme.pageBg} ${currentTheme.gutterShadow} border-r ${currentTheme.divider}`}>
+          <div className={`flex-1 flex flex-col overflow-y-auto px-6 sm:px-10 lg:px-14 xl:px-20 py-6 sm:py-8 lg:py-10 ${currentTheme.pageBg} ${currentTheme.gutterShadow} border-r ${currentTheme.divider}`}>
             
             {/* Page Header Strip */}
             <div className={`pb-3 mb-4 border-b ${currentTheme.divider} flex items-center justify-between text-xs font-mono ${currentTheme.textSecondary}`}>
@@ -432,19 +566,22 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
             </div>
 
             {/* Page Hero Image if on Page 1 */}
-            {leftPageIndex === 0 && article.coverImage && (
-              <div className="relative w-full h-40 sm:h-52 rounded-2xl overflow-hidden mb-6 border border-black/10 dark:border-white/10 shadow-md shrink-0">
+            {leftPageIndex === 0 && coverImageSrc && (
+              <div className="relative w-full h-44 sm:h-56 lg:h-64 rounded-2xl overflow-hidden mb-6 border border-black/10 dark:border-white/10 shadow-md shrink-0">
                 <img
-                  src={article.coverImage}
+                  src={coverImageSrc}
                   alt={article.title}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-                <div className="absolute bottom-3 left-4 right-4 text-white">
-                  <h1 className="font-serif text-lg sm:text-2xl font-semibold leading-tight drop-shadow">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+                <div className="absolute bottom-4 left-5 right-5 text-white">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider font-bold mb-1.5 bg-white/20 backdrop-blur-md">
+                    {article.category || article.tag}
+                  </span>
+                  <h1 className="font-serif text-xl sm:text-2xl lg:text-3xl font-semibold leading-tight drop-shadow">
                     {article.title}
                   </h1>
-                  <p className="text-xs font-mono text-white/80 mt-0.5 truncate">
+                  <p className="text-xs sm:text-sm font-sans text-white/80 mt-1 line-clamp-2">
                     {article.subtitle || article.excerpt}
                   </p>
                 </div>
@@ -467,7 +604,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
 
           {/* Right Page (Visible when readerMode === "spread" on wide screens) */}
           {readerMode === "spread" && (
-            <div className={`hidden lg:flex flex-1 flex-col overflow-y-auto px-6 sm:px-10 lg:px-14 py-6 sm:py-8 ${currentTheme.pageBg} ${currentTheme.gutterShadow}`}>
+            <div className={`hidden lg:flex flex-1 flex-col overflow-y-auto px-6 sm:px-10 lg:px-14 xl:px-20 py-6 sm:py-8 lg:py-10 ${currentTheme.pageBg} ${currentTheme.gutterShadow}`}>
               {rightPageData ? (
                 <>
                   {/* Page Header Strip */}
@@ -505,7 +642,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
         </div>
 
         {/* Bottom Page Flipping & Navigation Footer */}
-        <footer className={`px-4 sm:px-6 py-3 border-t ${currentTheme.divider} flex items-center justify-between gap-3 shrink-0 ${currentTheme.bg} z-20`}>
+        <footer className={`px-4 sm:px-6 lg:px-8 py-3 border-t ${currentTheme.divider} flex items-center justify-between gap-3 shrink-0 ${currentTheme.bg} z-20`}>
           
           {/* Previous Page Button */}
           <button
@@ -523,7 +660,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
           </button>
 
           {/* Quick Page Jump Chips / Indicator */}
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-md no-scrollbar py-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-lg lg:max-w-2xl no-scrollbar py-1">
             {pages.map((p, idx) => {
               const isSelected = 
                 idx === leftPageIndex || 
@@ -533,7 +670,7 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
                 <button
                   key={idx}
                   onClick={() => setCurrentPage(idx)}
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-mono flex items-center justify-center transition-all cursor-pointer ${
+                  className={`min-w-7 h-7 sm:min-w-8 sm:h-8 px-1 rounded-lg text-xs font-mono flex items-center justify-center transition-all cursor-pointer ${
                     isSelected
                       ? "bg-amber-500 text-white font-bold shadow-md scale-105"
                       : `${currentTheme.textSecondary} hover:bg-black/5 dark:hover:bg-white/10`

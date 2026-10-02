@@ -9,32 +9,18 @@
 
 /**
  * Extracts the Google Sheet ID from any Google Sheet URL or raw ID
- * Examples supported:
- *   - https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?usp=sharing
- *   - https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view
- *   - 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms
  */
 export function extractGoogleSheetId(input) {
   if (!input || typeof input !== "string") return null;
   const trimmed = input.trim();
   const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (match && match[1]) return match[1];
-  // If user pasted just the ID directly (alphanumeric, dashes, underscores, length > 15)
   if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) return trimmed;
   return null;
 }
 
 /**
  * METHOD 3: Normalizes Google Drive image sharing links into direct Google CDN URLs
- * 
- * Input examples:
- *   - https://drive.google.com/file/d/1xABC...XYZ/view?usp=sharing
- *   - https://drive.google.com/open?id=1xABC...XYZ
- *   - https://drive.google.com/uc?id=1xABC...XYZ
- * 
- * Output:
- *   - https://lh3.googleusercontent.com/d/1xABC...XYZ
- * (or returns original URL if not Google Drive)
  */
 export function normalizeGoogleDriveImageUrl(url) {
   if (!url || typeof url !== "string") {
@@ -43,7 +29,7 @@ export function normalizeGoogleDriveImageUrl(url) {
 
   const trimmed = url.trim();
 
-  // If already standard non-Google Drive image URL (Unsplash, HTTPS image, etc.)
+  // If already standard non-Google Drive image URL
   if (!trimmed.includes("drive.google.com") && !trimmed.includes("docs.google.com")) {
     return trimmed;
   }
@@ -67,8 +53,7 @@ export function normalizeGoogleDriveImageUrl(url) {
  * - Alt + Enter line breaks (\r\n, \n, \r) from Google Sheets & Excel
  * - Pipe symbols (|)
  * - Array of strings
- * - Numbered/bulleted lists (e.g. "1. Line \n 2. Line")
- * - Escaped \n literals
+ * - Numbered/bulleted lists
  */
 export function parseLyrics(input, fallbackExcerpt = "") {
   // 1. If already an array of lines
@@ -90,7 +75,7 @@ export function parseLyrics(input, fallbackExcerpt = "") {
     if (cleaned.length > 0) return cleaned;
   }
 
-  // 2. If a multi-line or pipe-delimited string (e.g. cell with Alt+Enter in Google Sheets)
+  // 2. If a multi-line or pipe-delimited string
   if (typeof input === "string" && input.trim().length > 0) {
     const normalized = input
       .replace(/\\n/g, "\n")
@@ -123,7 +108,7 @@ export function parseLyrics(input, fallbackExcerpt = "") {
 
 /**
  * Automatically splits long story prose or screenplay text into balanced book pages for the reader.
- * Handles both double-spaced paragraphs and single Alt+Enter dialogue lines.
+ * Handles single Alt+Enter dialogue lines, double-spaced paragraphs, and major scene breaks.
  */
 export function autoPaginateContent(title, subtitle, contentText) {
   if (!contentText) return [];
@@ -132,43 +117,48 @@ export function autoPaginateContent(title, subtitle, contentText) {
   const normalized = contentText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   if (!normalized) return [];
 
-  // If text contains double newlines, split by \n\n. If only single newlines (e.g. dialogue/poetry), split by \n
-  const rawParagraphs = normalized.includes("\n\n")
-    ? normalized.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
-    : normalized.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  // Split into individual non-empty lines / blocks
+  const rawLines = normalized.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (rawLines.length === 0) return [];
 
-  if (rawParagraphs.length === 0) return [];
-
+  // Group lines into readable pages of ~10-15 dialogue blocks or ~220 words
   const pages = [];
-  let currentPageParas = [];
-  let currentWordCount = 0;
+  let currentBlocks = [];
+  let currentWords = 0;
   let pageNumber = 1;
 
-  for (let i = 0; i < rawParagraphs.length; i++) {
-    const para = rawParagraphs[i];
-    const words = para.trim().split(/\s+/).length;
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    const words = line.split(/\s+/).length;
 
-    // Split if accumulated words exceed ~240 words and we already have at least 2 paragraphs/dialogue cues
-    if (currentWordCount + words > 260 && currentPageParas.length >= 2) {
+    // Check if line indicates a major scene transition
+    const isMajorBreak = 
+      line.includes("playing at her funeral") || 
+      line.includes("Sometimes in the darkest of places") ||
+      line.startsWith("WHITEBOARD —") ||
+      line.startsWith("[Act") ||
+      line.startsWith("[Scene");
+
+    if ((currentWords + words > 220 || isMajorBreak) && currentBlocks.length >= 5) {
       pages.push({
         pageNumber,
         chapter: pageNumber === 1 ? (subtitle || `${title} · Part I`) : `${title} · Part ${pageNumber}`,
-        content: currentPageParas
+        content: currentBlocks
       });
       pageNumber++;
-      currentPageParas = [para];
-      currentWordCount = words;
+      currentBlocks = [line];
+      currentWords = words;
     } else {
-      currentPageParas.push(para);
-      currentWordCount += words;
+      currentBlocks.push(line);
+      currentWords += words;
     }
   }
 
-  if (currentPageParas.length > 0) {
+  if (currentBlocks.length > 0) {
     pages.push({
       pageNumber,
       chapter: pageNumber === 1 ? (subtitle || `${title} · Part I`) : `${title} · Part ${pageNumber}`,
-      content: currentPageParas
+      content: currentBlocks
     });
   }
 
@@ -220,7 +210,6 @@ export async function fetchStoriesFromGoogleSheet(sheetUrlOrId) {
     throw new Error("Invalid Google Sheet link or ID. Please check the URL.");
   }
 
-  // Google Visualization API returns public JSON without needing any API key
   const endpoint = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
 
   const response = await fetch(endpoint);
@@ -250,7 +239,7 @@ export async function fetchStoriesFromGoogleSheet(sheetUrlOrId) {
     }
   });
 
-  // Check if row 0 has header strings (common in Google Sheets when cols don't carry labels)
+  // Check if row 0 has header strings
   let startRowIndex = 0;
   const firstRowCells = table.rows[0]?.c || [];
   const hasHeaderRow = firstRowCells.some(
