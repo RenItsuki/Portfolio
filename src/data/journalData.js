@@ -40,7 +40,7 @@
  * 
  * Leave as "" to use the local stories defined below.
  */
-export const GOOGLE_SHEETS_STORIES_URL = "";
+export const GOOGLE_SHEETS_STORIES_URL = "https://docs.google.com/spreadsheets/d/1BqN7OrBFSh_D5w26-4My6_5P6uWprQQeV9-mAVdBEWk/edit?usp=sharing";
 
 export const essays = [
   // ==========================================================================
