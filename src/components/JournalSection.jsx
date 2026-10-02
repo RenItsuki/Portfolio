@@ -14,13 +14,29 @@ import {
   Sparkles, 
   Clock, 
   ChevronLeft, 
-  ChevronRight,
-  Maximize2,
-  Minimize2,
+  ChevronRight, 
+  Maximize2, 
+  BookOpen, 
+  Feather, 
+  BookMarked, 
+  Compass, 
+  SlidersHorizontal,
+  FileSpreadsheet,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
   X,
-  BookOpen
+  HelpCircle
 } from "lucide-react";
-import { essays } from "../data/journalData";
+import { essays, GOOGLE_SHEETS_STORIES_URL } from "../data/journalData";
+import { StoryBookReaderModal } from "./StoryBookReaderModal";
+import { 
+  fetchStoriesFromGoogleSheet, 
+  normalizeGoogleDriveImageUrl,
+  extractGoogleSheetId,
+  parseLyrics
+} from "../utils/googleDrive";
 
 // Synthesize tactical acoustic audio feedback for player actions
 const playAudioFeedback = (type = "click") => {
@@ -48,6 +64,13 @@ const playAudioFeedback = (type = "click") => {
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
       osc.start();
       osc.stop(ctx.currentTime + 0.08);
+    } else if (type === "tab") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(620, ctx.currentTime);
+      gain.gain.setValueAtTime(0.03, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.06);
     }
   } catch (e) {
     // Graceful fallback if AudioContext is restricted
@@ -55,25 +78,93 @@ const playAudioFeedback = (type = "click") => {
 };
 
 export function JournalSection({ onReadArticle }) {
-  // Default to index 1 (warm amber palette matching The Weeknd reference)
-  const [activeIndex, setActiveIndex] = useState(1);
+  // Master stories state (starts with built-in essays, updates with Google Sheet if configured)
+  const [storiesList, setStoriesList] = useState(essays);
+  const [isLoadingSheet, setIsLoadingSheet] = useState(false);
+  const [sheetSyncStatus, setSheetSyncStatus] = useState("idle"); // "idle" | "syncing" | "success" | "error"
+  const [sheetErrorMessage, setSheetErrorMessage] = useState("");
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  
+  // Custom Google Sheet URL state (can be saved in localStorage or from code config)
+  const [customSheetUrl, setCustomSheetUrl] = useState(() => {
+    try {
+      return localStorage.getItem("joy_custom_sheet_url") || GOOGLE_SHEETS_STORIES_URL || "";
+    } catch (e) {
+      return GOOGLE_SHEETS_STORIES_URL || "";
+    }
+  });
+
+  // Category filter state: "all" | "shortstory" | "longstory" | "poem" | "essay"
+  const [filter, setFilter] = useState("all");
+
+  // Load from Google Sheet on mount if URL is provided
+  useEffect(() => {
+    const targetUrl = customSheetUrl || GOOGLE_SHEETS_STORIES_URL;
+    if (targetUrl && targetUrl.trim().length > 0) {
+      syncGoogleSheetStories(targetUrl);
+    }
+  }, []);
+
+  const syncGoogleSheetStories = async (urlToFetch) => {
+    if (!urlToFetch || !urlToFetch.trim()) return;
+    setIsLoadingSheet(true);
+    setSheetSyncStatus("syncing");
+    setSheetErrorMessage("");
+
+    try {
+      const fetched = await fetchStoriesFromGoogleSheet(urlToFetch);
+      if (fetched && fetched.length > 0) {
+        setStoriesList(fetched);
+        setSheetSyncStatus("success");
+        try {
+          localStorage.setItem("joy_custom_sheet_url", urlToFetch.trim());
+        } catch (e) {}
+      } else {
+        setSheetSyncStatus("error");
+        setSheetErrorMessage("No rows found in this sheet. Ensure row 1 has headers like Title, Content, CoverImage.");
+      }
+    } catch (err) {
+      console.warn("Could not load Google Sheet stories:", err);
+      setSheetSyncStatus("error");
+      setSheetErrorMessage(err.message || "Failed to fetch from Google Sheet");
+    } finally {
+      setIsLoadingSheet(false);
+    }
+  };
+
+  // Filter items according to user request
+  const filteredEssays = storiesList.filter((item) => {
+    if (filter === "all") return true;
+    if (filter === "shortstory") return item.type === "shortstory";
+    if (filter === "longstory") return item.type === "longstory";
+    if (filter === "poem") return item.type === "poem";
+    if (filter === "essay") return item.type === "essay";
+    return true;
+  });
+
+  // Calculate counts for tab badges
+  const allCount = storiesList.length;
+  const shortCount = storiesList.filter((e) => e.type === "shortstory").length;
+  const longCount = storiesList.filter((e) => e.type === "longstory").length;
+  const poemCount = storiesList.filter((e) => e.type === "poem").length;
+  const essayCount = storiesList.filter((e) => e.type === "essay").length;
+
+  // Active coverflow index
+  const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [lyricIndex, setLyricIndex] = useState(0);
-  const [progress, setProgress] = useState(25);
+  const [progress, setProgress] = useState(20);
   const [isMuted, setIsMuted] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
-  const [isAllLyricsOpen, setIsAllLyricsOpen] = useState(false);
+  const [isReaderOpen, setIsReaderOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1200
   );
 
-  const activeEssay = essays[activeIndex] || essays[0];
-  const lyrics = activeEssay.lyrics || [
-    activeEssay.excerpt,
-    "When building technology, latency is not an optimization metric—it is a safety boundary.",
-    "True elegance is measured by the effortless clarity it gives the human using it.",
-    "Resilience is not avoiding chaos; it is singing right through the storm."
-  ];
+  const activeEssay = filteredEssays[activeIndex] || filteredEssays[0] || storiesList[0];
+  
+  // Concise summary lyrics for streaming playback (supports arrays, Alt+Enter, and pipes)
+  const lyrics = parseLyrics(activeEssay?.lyrics, activeEssay?.excerpt || activeEssay?.title);
 
   const touchStartXRef = useRef(null);
 
@@ -84,24 +175,30 @@ export function JournalSection({ onReadArticle }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // When filter changes, reset activeIndex, lyricIndex, and progress
+  const handleFilterChange = (newFilter) => {
+    playAudioFeedback("tab");
+    setFilter(newFilter);
+    setActiveIndex(0);
+    setLyricIndex(0);
+    setProgress(0);
+  };
+
   // When active index changes, reset lyric index to 0
   useEffect(() => {
     setLyricIndex(0);
     setProgress(0);
   }, [activeIndex]);
 
-  // "when click play the detials comes like lyrics, slowly"
-  // Stream lyrics slowly line-by-line; when lyrics end, timeline stops and does NOT loop back
+  // Stream concise summary lyrics slowly line-by-line while playing
   useEffect(() => {
     let lyricsTimer;
     let progressTimer;
 
     if (isPlaying) {
-      // Advance lyric lines slowly
       lyricsTimer = setInterval(() => {
         setLyricIndex((prev) => {
           if (prev >= lyrics.length - 1) {
-            // End of lyrics reached: stop playback, set timeline to 100%, do not loop back
             setIsPlaying(false);
             setProgress(100);
             return prev;
@@ -110,7 +207,6 @@ export function JournalSection({ onReadArticle }) {
         });
       }, 3400);
 
-      // Scrubber progress ticker tied to track completion
       progressTimer = setInterval(() => {
         setProgress((prev) => {
           if (prev >= 100) {
@@ -128,37 +224,39 @@ export function JournalSection({ onReadArticle }) {
     };
   }, [isPlaying, lyrics.length]);
 
-  // Keyboard navigation (Arrow keys rotate coverflow, spacebar plays)
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (isReaderOpen || isSyncModalOpen) return;
       if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
       if (e.key === "ArrowLeft") {
         handlePrev();
       } else if (e.key === "ArrowRight") {
         handleNext();
-      } else if (e.key === " " && !isAllLyricsOpen) {
+      } else if (e.key === " ") {
         e.preventDefault();
         togglePlay();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeIndex, isPlaying, isAllLyricsOpen]);
+  }, [activeIndex, isPlaying, isReaderOpen, isSyncModalOpen, filteredEssays.length]);
 
   const handlePrev = () => {
+    if (filteredEssays.length <= 1) return;
     playAudioFeedback("switch");
-    setActiveIndex((prev) => (prev - 1 + essays.length) % essays.length);
+    setActiveIndex((prev) => (prev - 1 + filteredEssays.length) % filteredEssays.length);
   };
 
   const handleNext = () => {
+    if (filteredEssays.length <= 1) return;
     playAudioFeedback("switch");
-    setActiveIndex((prev) => (prev + 1) % essays.length);
+    setActiveIndex((prev) => (prev + 1) % filteredEssays.length);
   };
 
   const togglePlay = () => {
     playAudioFeedback("play");
     if (!isPlaying && (progress >= 100 || lyricIndex >= lyrics.length - 1)) {
-      // If timeline has finished, restart cleanly from beginning
       setProgress(0);
       setLyricIndex(0);
       setIsPlaying(true);
@@ -167,14 +265,13 @@ export function JournalSection({ onReadArticle }) {
     }
   };
 
-  // "and then click on the box it shows all the lyrics (details)"
+  // Open high-end book reader modal when clicked
   const handleBoxClick = (index) => {
     if (index === activeIndex) {
-      // Click on active box reveals ALL the lyrics (details)
-      setIsAllLyricsOpen(true);
+      setIsReaderOpen(true);
+      if (onReadArticle) onReadArticle(activeEssay);
       playAudioFeedback("click");
     } else {
-      // Click on flanking box brings it to center
       playAudioFeedback("switch");
       setActiveIndex(index);
     }
@@ -189,15 +286,14 @@ export function JournalSection({ onReadArticle }) {
     if (touchStartXRef.current === null) return;
     const diff = e.changedTouches[0].clientX - touchStartXRef.current;
     if (diff > 50) {
-      handlePrev();
-    } else if (diff < -50) {
       handleNext();
+    } else if (diff < -50) {
+      handlePrev();
     }
     touchStartXRef.current = null;
   };
 
-  // Calculate 4 visible lines for the normal state
-  // Always shows exactly 4 lines, with active line highlighted
+  // Calculate 4 visible lines of summary lyrics for normal view
   const getVisible4Lines = (currentIdx, totalLyrics) => {
     const total = totalLyrics.length;
     let start = currentIdx <= 1 ? 0 : currentIdx >= total - 3 ? Math.max(0, total - 4) : currentIdx - 1;
@@ -212,8 +308,17 @@ export function JournalSection({ onReadArticle }) {
   };
 
   // Responsive 3D Transform calculations matching Apple Coverflow geometry
-  const getCardTransform = (index) => {
-    const total = essays.length;
+  const getCardTransform = (index, total) => {
+    if (total <= 1) {
+      return {
+        transform: `translateX(0px) translateZ(80px) rotateY(0deg) scale(${windowWidth < 640 ? 1.0 : 1.05})`,
+        zIndex: 40,
+        opacity: 1,
+        filter: "brightness(1) drop-shadow(0 30px 50px rgba(0,0,0,0.65))",
+        pointerEvents: "auto"
+      };
+    }
+
     let diff = index - activeIndex;
     if (diff > total / 2) diff -= total;
     if (diff < -total / 2) diff += total;
@@ -282,26 +387,150 @@ export function JournalSection({ onReadArticle }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 sm:mb-14">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 sm:mb-10">
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#b18a79] dark:text-[#e5c07b]">
               <Disc3 className="w-4 h-4 animate-spin [animation-duration:8s]" />
-              <span>SYNCHRONIZED AUDIO LYRICS · 3D COVERFLOW</span>
+              <span>STORIES, POEMS & CHRONICLES · 3D COVERFLOW</span>
             </div>
             
             <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-normal text-[#202020] dark:text-[#f3f2f7] tracking-tight">
-              Audio Chronicles & Field Lyrics
+              Literary Field & Audio Lyrics
             </h2>
             
             <p className="text-sm sm:text-base text-[#5e5953] dark:text-[#a9a5b8] max-w-2xl font-sans font-light leading-relaxed">
-              Curated 3D album archive. Press <span className="font-semibold text-[#202020] dark:text-white">Play</span> to stream thoughts line-by-line like Apple Music lyrics, or click anywhere on the active card to expand <span className="font-semibold text-[#202020] dark:text-white">all lyrics & full details</span>.
+              Curated short stories, serials, and poems. Press <span className="font-semibold text-[#202020] dark:text-white">Play</span> to stream concise <span className="font-semibold text-[#202020] dark:text-white">summary lyrics</span>, or click any card to open the <span className="font-semibold text-[#202020] dark:text-white">paginated book reader</span>.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full ios-glass-pill text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500 dark:text-[#e5c07b]" />
-            <span>4-Line Synchronized Lyric View</span>
+          {/* Right Header Badges: Google Sheet Connect & Reader Pill */}
+          <div className="flex flex-wrap items-center gap-2">
+            
+            {/* Google Sheets Connect & Sync Pill */}
+            <button
+              onClick={() => setIsSyncModalOpen(true)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-mono transition-all border cursor-pointer ${
+                sheetSyncStatus === "success"
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/35 hover:scale-105"
+                  : isLoadingSheet
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/35 animate-pulse"
+                  : "ios-glass-pill text-[#5e5953] dark:text-[#a9a5b8] hover:text-[#202020] dark:hover:text-white hover:border-[#b18a79]/40"
+              }`}
+              title="Connect or Sync your Google Sheet / Google Drive"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>
+                {sheetSyncStatus === "success" 
+                  ? "Google Sheet Synced" 
+                  : isLoadingSheet 
+                  ? "Syncing Sheet..." 
+                  : "Google Sheet Sync"}
+              </span>
+              {sheetSyncStatus === "success" && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              )}
+            </button>
+
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full ios-glass-pill text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
+              <BookOpen className="w-3.5 h-3.5 text-amber-500 dark:text-[#e5c07b]" />
+              <span>Book Reader</span>
+            </div>
           </div>
+        </div>
+
+        {/* Filter Pills (All, Short Story, Long Story, Poem, Essays) */}
+        <div className="flex items-center justify-start sm:justify-center overflow-x-auto no-scrollbar gap-2 sm:gap-3 mb-8 sm:mb-12 py-1">
+          
+          {/* ALL FILTER */}
+          <button
+            onClick={() => handleFilterChange("all")}
+            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
+              filter === "all"
+                ? "bg-[#202020] dark:bg-white text-white dark:text-black border-transparent shadow-lg scale-105"
+                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-black/25 dark:hover:border-white/25"
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>All Works</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filter === "all" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+            }`}>
+              {allCount}
+            </span>
+          </button>
+
+          {/* SHORT STORY FILTER */}
+          <button
+            onClick={() => handleFilterChange("shortstory")}
+            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
+              filter === "shortstory"
+                ? "bg-amber-600 dark:bg-amber-400 text-white dark:text-black border-transparent shadow-lg scale-105"
+                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-amber-500/40"
+            }`}
+          >
+            <BookMarked className="w-3.5 h-3.5" />
+            <span>Short Stories</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filter === "shortstory" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+            }`}>
+              {shortCount}
+            </span>
+          </button>
+
+          {/* LONG STORY FILTER */}
+          <button
+            onClick={() => handleFilterChange("longstory")}
+            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
+              filter === "longstory"
+                ? "bg-sky-600 dark:bg-sky-400 text-white dark:text-black border-transparent shadow-lg scale-105"
+                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-sky-500/40"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Long Stories</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filter === "longstory" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+            }`}>
+              {longCount}
+            </span>
+          </button>
+
+          {/* POEM FILTER */}
+          <button
+            onClick={() => handleFilterChange("poem")}
+            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
+              filter === "poem"
+                ? "bg-pink-600 dark:bg-pink-400 text-white dark:text-black border-transparent shadow-lg scale-105"
+                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-pink-500/40"
+            }`}
+          >
+            <Feather className="w-3.5 h-3.5" />
+            <span>Poems</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filter === "poem" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+            }`}>
+              {poemCount}
+            </span>
+          </button>
+
+          {/* ESSAYS FILTER */}
+          <button
+            onClick={() => handleFilterChange("essay")}
+            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
+              filter === "essay"
+                ? "bg-[#4b396f] dark:bg-[#b6a2c9] text-white dark:text-black border-transparent shadow-lg scale-105"
+                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-[#b6a2c9]/40"
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Essays</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              filter === "essay" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+            }`}>
+              {essayCount}
+            </span>
+          </button>
+
         </div>
 
         {/* 3D Coverflow Stage Area */}
@@ -311,38 +540,45 @@ export function JournalSection({ onReadArticle }) {
           onTouchEnd={handleTouchEnd}
         >
           {/* Dynamic Ambient Background Aura Matching Active Album Palette */}
-          <div 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] sm:w-[680px] lg:w-[880px] h-[320px] sm:h-[420px] lg:h-[500px] rounded-full pointer-events-none transition-all duration-700 ease-out -z-10"
-            style={{
-              background: `radial-gradient(ellipse at center, ${activeEssay.accentColor}44 0%, ${activeEssay.accentColor}18 50%, transparent 75%)`,
-              filter: "blur(80px)"
-            }}
-          />
+          {activeEssay && (
+            <div 
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] sm:w-[680px] lg:w-[880px] h-[320px] sm:h-[420px] lg:h-[500px] rounded-full pointer-events-none transition-all duration-700 ease-out -z-10"
+              style={{
+                background: `radial-gradient(ellipse at center, ${activeEssay.accentColor}44 0%, ${activeEssay.accentColor}18 50%, transparent 75%)`,
+                filter: "blur(80px)"
+              }}
+            />
+          )}
 
           {/* Left / Right Fast Step Chevron Arrows (Desktop Convenience) */}
-          <button
-            onClick={handlePrev}
-            className="absolute left-2 sm:left-6 z-40 p-3 rounded-full bg-black/40 hover:bg-black/60 dark:bg-white/10 dark:hover:bg-white/20 text-white backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 cursor-pointer hidden md:flex items-center justify-center shadow-lg"
-            title="Previous album (Left Arrow)"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
+          {filteredEssays.length > 1 && (
+            <>
+              <button
+                onClick={handlePrev}
+                className="absolute left-2 sm:left-6 z-40 p-3 rounded-full bg-black/40 hover:bg-black/60 dark:bg-white/10 dark:hover:bg-white/20 text-white backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 cursor-pointer hidden md:flex items-center justify-center shadow-lg"
+                title="Previous track (Left Arrow)"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
 
-          <button
-            onClick={handleNext}
-            className="absolute right-2 sm:right-6 z-40 p-3 rounded-full bg-black/40 hover:bg-black/60 dark:bg-white/10 dark:hover:bg-white/20 text-white backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 cursor-pointer hidden md:flex items-center justify-center shadow-lg"
-            title="Next album (Right Arrow)"
-          >
-            <ChevronRight className="w-6 h-6" />
-          </button>
+              <button
+                onClick={handleNext}
+                className="absolute right-2 sm:right-6 z-40 p-3 rounded-full bg-black/40 hover:bg-black/60 dark:bg-white/10 dark:hover:bg-white/20 text-white backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 cursor-pointer hidden md:flex items-center justify-center shadow-lg"
+                title="Next track (Right Arrow)"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
 
           {/* 3D Coverflow Cards Stage */}
           <div className="coverflow-stage flex items-center justify-center h-[420px] sm:h-[470px] lg:h-[510px]">
-            {essays.map((essay, idx) => {
-              const cardTransform = getCardTransform(idx);
+            {filteredEssays.map((essay, idx) => {
+              const cardTransform = getCardTransform(idx, filteredEssays.length);
               const isActive = idx === activeIndex;
-              const essayLyrics = essay.lyrics || [essay.excerpt];
+              const essayLyrics = parseLyrics(essay.lyrics, essay.excerpt || essay.title);
               const visible4 = getVisible4Lines(isActive ? lyricIndex : 0, essayLyrics);
+              const cardCover = normalizeGoogleDriveImageUrl(essay.coverImage);
 
               return (
                 <div
@@ -356,28 +592,28 @@ export function JournalSection({ onReadArticle }) {
                     WebkitMaskImage: "-webkit-radial-gradient(white, black)",
                     maskImage: "radial-gradient(white, black)"
                   }}
-                  title={isActive ? "Click box to view ALL lyrics & full details" : `Select ${essay.title}`}
+                  title={isActive ? "Click card to open Paginated Book Reader" : `Select ${essay.title}`}
                 >
-                  {/* The Rest of the Box is an Image */}
+                  {/* Background Artwork Image (Supports Google Drive image URLs) */}
                   <img
-                    src={essay.coverImage}
+                    src={cardCover}
                     alt={essay.title}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
                     loading="lazy"
                   />
 
-                  {/* Dark Vignettes for Contrast (Top behind title & Bottom behind lyrics) */}
+                  {/* Dark Vignettes for Contrast (Top behind title & Bottom behind summary lyrics) */}
                   <div className="absolute top-0 inset-x-0 h-36 bg-gradient-to-b from-black/90 via-black/60 to-transparent pointer-events-none" />
                   <div className="absolute bottom-0 inset-x-0 h-64 bg-gradient-to-t from-black/95 via-black/75 to-transparent pointer-events-none" />
 
-                  {/* TITLE BEING IN THE TOP OF THE BOX */}
+                  {/* TITLE AT TOP OF THE CARD */}
                   <div className="absolute top-0 inset-x-0 p-4 sm:p-5 z-20 flex flex-col gap-1 text-left">
                     <div className="flex items-center justify-between text-[11px] font-mono">
                       <span 
                         className="font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-black/50 backdrop-blur-md border border-white/15"
                         style={{ color: isActive ? essay.accentColor : "#ffffff" }}
                       >
-                        {essay.tag}
+                        {essay.category || essay.tag}
                       </span>
 
                       {/* Equalizer animation when active & playing */}
@@ -408,10 +644,10 @@ export function JournalSection({ onReadArticle }) {
                     </span>
                   </div>
 
-                  {/* ONLY 4 LINES ARE IN THE LYRICS IN THE NORMAL */}
+                  {/* ONLY SUMMARY IN THE PLAYING LYRICS (4 LINES NORMAL VIEW) */}
                   <div className="absolute bottom-4 sm:bottom-6 inset-x-0 px-4 sm:px-6 z-20 flex flex-col justify-end text-left">
                     
-                    {/* The 4-Line Lyrics Box */}
+                    {/* The 4-Line Summary Lyrics Box */}
                     <div className="space-y-2 sm:space-y-2.5 min-h-[140px] sm:min-h-[160px] flex flex-col justify-center">
                       {visible4.map((item, lIdx) => {
                         const isCurrent = isActive && isPlaying && item.isActive;
@@ -436,13 +672,13 @@ export function JournalSection({ onReadArticle }) {
                     {/* Subtle Cue Prompt at Bottom of Box */}
                     <div className="pt-3 mt-1 border-t border-white/15 flex items-center justify-between text-[10px] sm:text-[11px] font-mono text-white/60">
                       <span className="flex items-center gap-1.5">
-                        <MessageSquare className="w-3 h-3 text-amber-400" />
-                        <span>Click box for all lyrics</span>
+                        <BookOpen className="w-3 h-3 text-amber-400" />
+                        <span>Click to read pages</span>
                       </span>
 
                       <span className="flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity">
                         <Maximize2 className="w-3 h-3" />
-                        <span>Expand</span>
+                        <span>Open Book</span>
                       </span>
                     </div>
 
@@ -453,30 +689,32 @@ export function JournalSection({ onReadArticle }) {
           </div>
 
           {/* Track Dots Indicator */}
-          <div className="flex items-center gap-2 mt-7 mb-2">
-            {essays.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleBoxClick(idx)}
-                className={`transition-all duration-300 rounded-full cursor-pointer ${
-                  idx === activeIndex
-                    ? "w-8 h-2 bg-amber-500 dark:bg-[#e5c07b]"
-                    : "w-2 h-2 bg-black/20 dark:bg-white/25 hover:bg-black/40 dark:hover:bg-white/45"
-                }`}
-                aria-label={`Jump to album ${idx + 1}`}
-              />
-            ))}
-          </div>
+          {filteredEssays.length > 1 && (
+            <div className="flex items-center gap-2 mt-7 mb-2">
+              {filteredEssays.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleBoxClick(idx)}
+                  className={`transition-all duration-300 rounded-full cursor-pointer ${
+                    idx === activeIndex
+                      ? "w-8 h-2 bg-amber-500 dark:bg-[#e5c07b]"
+                      : "w-2 h-2 bg-black/20 dark:bg-white/25 hover:bg-black/40 dark:hover:bg-white/45"
+                  }`}
+                  aria-label={`Jump to album ${idx + 1}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Floating Liquid Glass Player Dock (Matching User Reference Image) */}
+        {/* Floating Liquid Glass Player Dock */}
         <div className="relative max-w-3xl mx-auto mt-2 px-2 sm:px-0">
           
-          {/* Quick Playlist Queue Popover (Toggled by List Button) */}
+          {/* Quick Playlist Queue Popover */}
           {isQueueOpen && (
-            <div className="absolute bottom-full mb-3 inset-x-0 bg-white/90 dark:bg-[#1a1c26]/95 backdrop-blur-2xl rounded-3xl border border-white/40 dark:border-white/15 p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <div className="absolute bottom-full mb-3 inset-x-0 bg-white/95 dark:bg-[#1a1c26]/95 backdrop-blur-2xl rounded-3xl border border-white/40 dark:border-white/15 p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
               <div className="flex items-center justify-between pb-3 mb-2 border-b border-black/10 dark:border-white/10 text-xs font-mono font-semibold uppercase tracking-wider text-[#5e5953] dark:text-[#a9a5b8]">
-                <span>Archive Track Queue (5 Records)</span>
+                <span>Filtered Track Queue ({filteredEssays.length} Records)</span>
                 <button
                   onClick={() => setIsQueueOpen(false)}
                   className="p-1 hover:text-black dark:hover:text-white cursor-pointer"
@@ -486,7 +724,7 @@ export function JournalSection({ onReadArticle }) {
               </div>
 
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                {essays.map((essay, idx) => (
+                {filteredEssays.map((essay, idx) => (
                   <div
                     key={essay.id}
                     onClick={() => {
@@ -505,7 +743,7 @@ export function JournalSection({ onReadArticle }) {
                         0{idx + 1}
                       </span>
                       <img
-                        src={essay.coverImage}
+                        src={normalizeGoogleDriveImageUrl(essay.coverImage)}
                         alt=""
                         className="w-8 h-8 rounded-lg object-cover shrink-0"
                       />
@@ -528,7 +766,6 @@ export function JournalSection({ onReadArticle }) {
             
             {/* Left Playback Transport Controls */}
             <div className="flex items-center gap-1 sm:gap-2 pl-1 sm:pl-2 shrink-0">
-              {/* Previous Track */}
               <button
                 onClick={handlePrev}
                 className="p-2 sm:p-2.5 rounded-full text-[#303030] dark:text-white/80 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-90 cursor-pointer"
@@ -537,11 +774,10 @@ export function JournalSection({ onReadArticle }) {
                 <SkipBack className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
               </button>
 
-              {/* Central Play/Pause Button - Starts Lyrics Flow */}
               <button
                 onClick={togglePlay}
                 className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#1b1b22] dark:bg-white text-white dark:text-black flex items-center justify-center hover:scale-108 active:scale-95 transition-transform shadow-lg cursor-pointer group"
-                title={isPlaying ? "Pause Lyrics Streaming" : "Play & Stream Lyrics Slowly"}
+                title={isPlaying ? "Pause Summary Lyrics Stream" : "Play & Stream Summary Lyrics"}
               >
                 {isPlaying ? (
                   <Pause className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
@@ -550,7 +786,6 @@ export function JournalSection({ onReadArticle }) {
                 )}
               </button>
 
-              {/* Next Track */}
               <button
                 onClick={handleNext}
                 className="p-2 sm:p-2.5 rounded-full text-[#303030] dark:text-white/80 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-90 cursor-pointer"
@@ -560,20 +795,18 @@ export function JournalSection({ onReadArticle }) {
               </button>
             </div>
 
-            {/* Center "Now Playing" Frosted Capsule */}
+            {/* Center "Now Playing" Capsule - Click to open Book Reader */}
             <div 
-              onClick={() => setIsAllLyricsOpen(true)}
+              onClick={() => setIsReaderOpen(true)}
               className="flex-1 min-w-0 max-w-sm sm:max-w-md bg-black/80 dark:bg-black/85 backdrop-blur-xl border border-white/15 rounded-2xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center gap-2.5 sm:gap-3 cursor-pointer hover:border-white/35 transition-all shadow-inner group relative overflow-hidden"
-              title="Click to view ALL lyrics & details"
+              title="Click to open Paginated Book Reader"
             >
-              {/* Mini Album Cover Thumbnail */}
               <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden shrink-0 border border-white/20 shadow">
                 <img
-                  src={activeEssay.coverImage}
-                  alt={activeEssay.title}
+                  src={normalizeGoogleDriveImageUrl(activeEssay?.coverImage)}
+                  alt={activeEssay?.title}
                   className="w-full h-full object-cover"
                 />
-                {/* Tiny Live Equalizer in Thumbnail Corner when Playing */}
                 {isPlaying && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-0.5">
                     <span className="w-0.5 bg-amber-400 rounded-full animate-eq-1" />
@@ -583,23 +816,22 @@ export function JournalSection({ onReadArticle }) {
                 )}
               </div>
 
-              {/* Track Title & Lyric Preview Text */}
+              {/* Track Title & Summary Lyric Preview */}
               <div className="min-w-0 flex-1 pr-1">
                 <p className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-amber-300 dark:group-hover:text-[#e5c07b] transition-colors leading-tight">
-                  {activeEssay.title}
+                  {activeEssay?.title}
                 </p>
                 <p className="text-[10px] sm:text-[11px] text-white/60 truncate leading-tight">
-                  {isPlaying ? `♫ ${lyrics[lyricIndex] || activeEssay.tag}` : `Joy Karmakar · ${activeEssay.tag}`}
+                  {isPlaying ? `♫ ${lyrics[lyricIndex] || activeEssay?.tag}` : `Joy Karmakar · ${activeEssay?.category || activeEssay?.tag}`}
                 </p>
               </div>
 
-              {/* Status Airplay & More Options Icons */}
               <div className="hidden sm:flex items-center gap-1.5 text-white/50 group-hover:text-white/80 transition-colors shrink-0">
                 <Airplay className="w-3.5 h-3.5" />
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </div>
 
-              {/* Progress Scrubber Line on Bottom of Capsule */}
+              {/* Progress Scrubber */}
               <div className="absolute bottom-0 inset-x-0 h-[2px] bg-white/15">
                 <div 
                   className="h-full bg-amber-400 transition-[width] duration-300"
@@ -608,19 +840,33 @@ export function JournalSection({ onReadArticle }) {
               </div>
             </div>
 
-            {/* Right Utility Action Buttons (Lyrics, Queue, Volume) */}
+            {/* Right Utility Action Buttons */}
             <div className="flex items-center gap-1 sm:gap-2 pr-1 sm:pr-2 shrink-0 text-[#303030] dark:text-white/80">
-              {/* Lyrics / Reader View Trigger */}
+              
+              {/* Google Sheets Sync Indicator Button */}
               <button
-                onClick={() => setIsAllLyricsOpen((prev) => !prev)}
+                onClick={() => setIsSyncModalOpen(true)}
                 className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
-                  isAllLyricsOpen
+                  sheetSyncStatus === "success" 
+                    ? "text-emerald-500 hover:bg-emerald-500/10" 
+                    : "hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
+                }`}
+                title="Google Sheet Live Sync"
+              >
+                <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Open Book Reader Button */}
+              <button
+                onClick={() => setIsReaderOpen((prev) => !prev)}
+                className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
+                  isReaderOpen
                     ? "bg-amber-500/20 text-amber-500 dark:text-amber-400"
                     : "hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
                 }`}
-                title="View All Lyrics & Details"
+                title="Open Paginated Book Reader"
               >
-                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
               {/* Queue List Trigger */}
@@ -636,7 +882,7 @@ export function JournalSection({ onReadArticle }) {
                 <ListMusic className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
-              {/* Volume / Sound simulation */}
+              {/* Sound / Mute toggle */}
               <button
                 onClick={() => setIsMuted((prev) => !prev)}
                 className="p-2 sm:p-2.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-all cursor-pointer"
@@ -656,192 +902,145 @@ export function JournalSection({ onReadArticle }) {
       </div>
 
       {/* ============================================================== */}
-      {/* ARTICLE DETAIL MODAL — RPG Chronicle Entry                      */}
-      {/* Click a journal card → opens beautiful full article view        */}
+      {/* PAGINATED BOOK READER MODAL                                    */}
       {/* ============================================================== */}
-      {isAllLyricsOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-2xl"
-          style={{ animation: "rpgNameEnter 0.4s cubic-bezier(0,0,0.2,1) forwards" }}
+      <StoryBookReaderModal
+        article={activeEssay}
+        isOpen={isReaderOpen}
+        onClose={() => setIsReaderOpen(false)}
+      />
+
+      {/* ============================================================== */}
+      {/* GOOGLE DRIVE & SHEETS LIVE SYNC MODAL                           */}
+      {/* Configure Google Sheet link & see column instructions          */}
+      {/* ============================================================== */}
+      {isSyncModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setIsAllLyricsOpen(false);
+            if (e.target === e.currentTarget) setIsSyncModalOpen(false);
           }}
         >
-          {/* Modal Shell */}
-          <div
-            className="relative w-full sm:max-w-2xl max-h-[96dvh] sm:max-h-[90vh] rounded-t-[28px] sm:rounded-[28px] overflow-hidden flex flex-col shadow-2xl"
-            style={{
-              background: "linear-gradient(160deg, #fdfcf9 0%, #f3ede3 100%)",
-            }}
-          >
-            {/* Dark mode overlay */}
-            <div className="absolute inset-0 bg-[#0d0f1a] opacity-0 dark:opacity-100 pointer-events-none" />
-
-            {/* Hero Cover Strip */}
-            <div className="relative h-48 sm:h-56 shrink-0 overflow-hidden">
-              <img
-                src={activeEssay.coverImage}
-                alt={activeEssay.title}
-                className="absolute inset-0 w-full h-full object-cover"
-                style={{ filter: "brightness(0.72) saturate(1.15)" }}
-              />
-              {/* Gradient scrim */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-
-              {/* Cover content */}
-              <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest font-mono border"
-                    style={{
-                      backgroundColor: `${activeEssay.accentColor}30`,
-                      borderColor: `${activeEssay.accentColor}60`,
-                      color: activeEssay.accentColor
-                    }}
-                  >
-                    {activeEssay.tag}
-                  </span>
-                  <span className="text-white/50 text-[10px] font-mono">•</span>
-                  <span className="text-white/60 text-[10px] font-mono uppercase tracking-wider">{activeEssay.readTime}</span>
+          <div className="relative w-full max-w-xl bg-[#fdfcf9] dark:bg-[#161822] border border-[#dbd2c4] dark:border-[#38374d] rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-left">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#dbd2c4] dark:border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <FileSpreadsheet className="w-5 h-5" />
                 </div>
-                <h2 className="font-serif text-xl sm:text-2xl font-medium text-white leading-snug">
-                  {activeEssay.title}
-                </h2>
+                <div>
+                  <h3 className="font-serif text-lg sm:text-xl font-semibold text-[#202020] dark:text-[#f3f2f7]">
+                    Google Sheet & Drive Sync
+                  </h3>
+                  <p className="text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
+                    Load stories dynamically without uploading to GitHub
+                  </p>
+                </div>
               </div>
 
-              {/* Close button */}
               <button
-                onClick={() => setIsAllLyricsOpen(false)}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md flex items-center justify-center text-white/80 hover:text-white transition-all cursor-pointer border border-white/15"
-                title="Close"
+                onClick={() => setIsSyncModalOpen(false)}
+                className="p-1.5 rounded-lg text-[#5e5953] dark:text-[#a9a5b8] hover:text-[#202020] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Scrollable Article Body */}
-            <div className="relative z-10 flex-1 overflow-y-auto">
-              {/* Author + Date strip */}
-              <div className="flex items-center justify-between px-5 sm:px-8 py-4 border-b border-[#dbd2c4]/60 dark:border-white/10">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold font-serif text-white shrink-0"
-                    style={{ backgroundColor: activeEssay.accentColor }}
-                  >
-                    JK
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-[#202020] dark:text-[#f3f2f7]">Joy Karmakar</p>
-                    <p className="text-[10px] text-[#8f8880] dark:text-[#736f82] font-mono">{activeEssay.date}</p>
-                  </div>
-                </div>
-                <span
-                  className="text-[10px] font-mono px-2.5 py-1 rounded-lg border"
-                  style={{
-                    color: activeEssay.accentColor,
-                    borderColor: `${activeEssay.accentColor}40`,
-                    backgroundColor: `${activeEssay.accentColor}12`
-                  }}
+            {/* Input Form */}
+            <div className="space-y-3">
+              <label className="block text-xs font-mono uppercase tracking-wider font-semibold text-[#202020] dark:text-[#f3f2f7]">
+                Google Sheet Link or Sheet ID:
+              </label>
+              
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={customSheetUrl}
+                  onChange={(e) => setCustomSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=sharing"
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-[#dbd2c4] dark:border-[#38374d] bg-white dark:bg-[#10121a] text-[#202020] dark:text-[#f3f2f7] text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                />
+
+                <button
+                  onClick={() => syncGoogleSheetStories(customSheetUrl)}
+                  disabled={isLoadingSheet || !customSheetUrl.trim()}
+                  className={`px-4 py-2.5 rounded-xl font-mono text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isLoadingSheet
+                      ? "bg-emerald-500/50 text-white cursor-not-allowed"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95"
+                  }`}
                 >
-                  CHRONICLE ENTRY
-                </span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSheet ? "animate-spin" : ""}`} />
+                  <span>Sync</span>
+                </button>
               </div>
 
-              {/* Article content */}
-              <div className="px-5 sm:px-8 py-6 space-y-6">
-
-                {/* Lead excerpt */}
-                <blockquote
-                  className="relative pl-5 py-1 font-serif italic text-base sm:text-lg leading-relaxed text-[#202020] dark:text-[#e8e5f0] border-l-[3px]"
-                  style={{ borderColor: activeEssay.accentColor }}
-                >
-                  <span
-                    className="absolute -top-1 -left-0.5 text-3xl font-serif leading-none opacity-40"
-                    style={{ color: activeEssay.accentColor }}
-                  >"</span>
-                  {activeEssay.excerpt}
-                </blockquote>
-
-                {/* Divider with icon */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-[#dbd2c4]/60 dark:bg-white/10" />
-                  <span
-                    className="text-[10px] font-mono uppercase tracking-widest px-2"
-                    style={{ color: activeEssay.accentColor }}
-                  >
-                    ✦ FULL ARTICLE ✦
-                  </span>
-                  <div className="flex-1 h-px bg-[#dbd2c4]/60 dark:bg-white/10" />
+              {/* Status Message */}
+              {sheetSyncStatus === "success" && (
+                <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Successfully synced {storiesList.length} stories from your Google Sheet!</span>
                 </div>
+              )}
 
-                {/* Full prose content */}
-                <div className="prose-article">
-                  {(activeEssay.content || activeEssay.excerpt).split(/\n\s*\n/).map((para, i) => {
-                    const cleaned = para.trim();
-                    if (!cleaned) return null;
-
-                    // Detect markdown bold **text** and numbered list items
-                    const renderInline = (text) =>
-                      text.split(/(\*\*[^*]+\*\*)/).map((chunk, j) =>
-                        chunk.startsWith("**") && chunk.endsWith("**")
-                          ? <strong key={j} className="font-semibold text-[#202020] dark:text-[#f3f2f7]">{chunk.slice(2, -2)}</strong>
-                          : chunk
-                      );
-
-                    // Numbered list detection
-                    if (/^\d+\./.test(cleaned)) {
-                      const items = cleaned.split(/\n/).filter(Boolean);
-                      return (
-                        <ul key={i} className="space-y-2 pl-0 mt-0">
-                          {items.map((item, k) => (
-                            <li key={k} className="flex items-start gap-3 text-sm sm:text-base leading-relaxed text-[#5e5953] dark:text-[#a9a5b8]">
-                              <span
-                                className="mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white font-mono"
-                                style={{ backgroundColor: activeEssay.accentColor }}
-                              >
-                                {item.match(/^(\d+)\./)?.[1] || k + 1}
-                              </span>
-                              <span>{renderInline(item.replace(/^\d+\.\s*/, "").replace(/\*\*([^*]+)\*\*:/, "$1:"))}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      );
-                    }
-
-                    return (
-                      <p key={i} className="text-sm sm:text-base leading-relaxed text-[#5e5953] dark:text-[#a9a5b8]">
-                        {renderInline(cleaned)}
-                      </p>
-                    );
-                  })}
-                </div>
-
-                {/* Footer meta row */}
-                <div className="pt-4 border-t border-[#dbd2c4]/50 dark:border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2 h-2 rounded-full animate-pulse"
-                      style={{ backgroundColor: activeEssay.accentColor }}
-                    />
-                    <span className="text-[11px] font-mono text-[#8f8880] dark:text-[#736f82] uppercase tracking-wider">
-                      Last Saves · Chronicle {activeEssay.date}
-                    </span>
+              {sheetSyncStatus === "error" && (
+                <div className="flex items-start gap-2 text-xs font-mono text-red-600 dark:text-red-400 bg-red-500/10 p-2.5 rounded-xl border border-red-500/20">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Sync Failed:</p>
+                    <p>{sheetErrorMessage || "Could not access sheet. Verify sharing is 'Anyone with the link can view'."}</p>
                   </div>
-                  <button
-                    onClick={() => setIsAllLyricsOpen(false)}
-                    className="px-4 py-1.5 rounded-full text-xs font-bold font-mono uppercase tracking-wider border transition-all hover:scale-105 cursor-pointer"
-                    style={{
-                      color: activeEssay.accentColor,
-                      borderColor: `${activeEssay.accentColor}50`,
-                      backgroundColor: `${activeEssay.accentColor}12`
-                    }}
-                  >
-                    Close ✕
-                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Step-by-Step Instructions */}
+            <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-3 text-xs text-[#5e5953] dark:text-[#a9a5b8]">
+              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[11px] text-[#202020] dark:text-[#f3f2f7]">
+                <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                <span>How to Format Your Google Sheet (Method 2 & 3)</span>
+              </div>
+
+              <div className="space-y-1.5 font-sans leading-relaxed">
+                <p>
+                  <strong className="text-[#202020] dark:text-white">1. Column Headers (Row 1):</strong> Make sure row 1 has columns named:
+                </p>
+                <div className="p-2 rounded-lg bg-white dark:bg-black/40 font-mono text-[11px] border border-black/10 dark:border-white/10 text-emerald-600 dark:text-emerald-300">
+                  Title · Category · SummaryLyrics · Content · CoverImage
                 </div>
 
+                <p>
+                  <strong className="text-[#202020] dark:text-white">2. Category values:</strong> Use <code className="font-mono text-amber-600 dark:text-amber-400">Short Story</code>, <code className="font-mono text-sky-600 dark:text-sky-400">Long Story</code>, or <code className="font-mono text-pink-600 dark:text-pink-400">Poem</code>.
+                </p>
+
+                <p>
+                  <strong className="text-[#202020] dark:text-white">3. Google Drive Cover Images (Method 3):</strong> In the <code className="font-mono">CoverImage</code> column, you can paste normal Google Drive image share links like:
+                </p>
+                <div className="p-2 rounded-lg bg-white dark:bg-black/40 font-mono text-[10px] break-all border border-black/10 dark:border-white/10 opacity-80">
+                  https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing
+                </div>
+                <p className="text-[11px] italic">
+                  The portfolio automatically converts it to a direct CDN image!
+                </p>
+
+                <p>
+                  <strong className="text-[#202020] dark:text-white">4. Share Settings:</strong> In Google Sheets, click <strong>Share</strong> and set to <strong>"Anyone with the link can view"</strong>.
+                </p>
               </div>
             </div>
+
+            {/* Permanent Code Config Note */}
+            <div className="pt-2 text-[11px] font-mono text-[#8f8880] dark:text-[#736f82] flex items-center justify-between">
+              <span>Permanently configure in: <code className="text-[#202020] dark:text-white font-bold">src/data/journalData.js</code></span>
+              <button
+                onClick={() => setIsSyncModalOpen(false)}
+                className="px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-[#202020] dark:text-white"
+              >
+                Done
+              </button>
+            </div>
+
           </div>
         </div>
       )}
@@ -849,3 +1048,5 @@ export function JournalSection({ onReadArticle }) {
     </section>
   );
 }
+
+export default JournalSection;
