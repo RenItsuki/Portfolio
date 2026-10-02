@@ -6,7 +6,6 @@ import {
   SkipForward, 
   Volume2, 
   VolumeX, 
-  MessageSquare, 
   ListMusic, 
   MoreHorizontal, 
   Airplay, 
@@ -20,21 +19,13 @@ import {
   Feather, 
   BookMarked, 
   Compass, 
-  SlidersHorizontal,
-  FileSpreadsheet,
-  RefreshCw,
-  ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  X,
-  HelpCircle
+  SlidersHorizontal
 } from "lucide-react";
 import { essays, GOOGLE_SHEETS_STORIES_URL } from "../data/journalData";
 import { StoryBookReaderModal } from "./StoryBookReaderModal";
 import { 
   fetchStoriesFromGoogleSheet, 
   normalizeGoogleDriveImageUrl,
-  extractGoogleSheetId,
   parseLyrics
 } from "../utils/googleDrive";
 
@@ -78,59 +69,34 @@ const playAudioFeedback = (type = "click") => {
 };
 
 export function JournalSection({ onReadArticle }) {
-  // Master stories state (starts with built-in essays, updates with Google Sheet if configured)
+  // Master stories state (starts with built-in essays, quietly updates from Google Sheet if configured)
   const [storiesList, setStoriesList] = useState(essays);
-  const [isLoadingSheet, setIsLoadingSheet] = useState(false);
-  const [sheetSyncStatus, setSheetSyncStatus] = useState("idle"); // "idle" | "syncing" | "success" | "error"
-  const [sheetErrorMessage, setSheetErrorMessage] = useState("");
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-  
-  // Custom Google Sheet URL state (can be saved in localStorage or from code config)
-  const [customSheetUrl, setCustomSheetUrl] = useState(() => {
-    try {
-      return localStorage.getItem("joy_custom_sheet_url") || GOOGLE_SHEETS_STORIES_URL || "";
-    } catch (e) {
-      return GOOGLE_SHEETS_STORIES_URL || "";
-    }
-  });
-
-  // Category filter state: "all" | "shortstory" | "longstory" | "poem" | "essay"
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [lyricIndex, setLyricIndex] = useState(0);
+  const [progress, setProgress] = useState(20);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [isReaderOpen, setIsReaderOpen] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  );
 
-  // Load from Google Sheet on mount if URL is provided
+  // Quietly load from Google Sheet in background if URL is provided
   useEffect(() => {
-    const targetUrl = customSheetUrl || GOOGLE_SHEETS_STORIES_URL;
-    if (targetUrl && targetUrl.trim().length > 0) {
-      syncGoogleSheetStories(targetUrl);
+    if (GOOGLE_SHEETS_STORIES_URL && GOOGLE_SHEETS_STORIES_URL.trim().length > 0) {
+      fetchStoriesFromGoogleSheet(GOOGLE_SHEETS_STORIES_URL)
+        .then((fetched) => {
+          if (fetched && fetched.length > 0) {
+            setStoriesList(fetched);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not load Google Sheet stories, using local archive:", err);
+        });
     }
   }, []);
-
-  const syncGoogleSheetStories = async (urlToFetch) => {
-    if (!urlToFetch || !urlToFetch.trim()) return;
-    setIsLoadingSheet(true);
-    setSheetSyncStatus("syncing");
-    setSheetErrorMessage("");
-
-    try {
-      const fetched = await fetchStoriesFromGoogleSheet(urlToFetch);
-      if (fetched && fetched.length > 0) {
-        setStoriesList(fetched);
-        setSheetSyncStatus("success");
-        try {
-          localStorage.setItem("joy_custom_sheet_url", urlToFetch.trim());
-        } catch (e) {}
-      } else {
-        setSheetSyncStatus("error");
-        setSheetErrorMessage("No rows found in this sheet. Ensure row 1 has headers like Title, Content, CoverImage.");
-      }
-    } catch (err) {
-      console.warn("Could not load Google Sheet stories:", err);
-      setSheetSyncStatus("error");
-      setSheetErrorMessage(err.message || "Failed to fetch from Google Sheet");
-    } finally {
-      setIsLoadingSheet(false);
-    }
-  };
 
   // Filter items according to user request
   const filteredEssays = storiesList.filter((item) => {
@@ -148,18 +114,6 @@ export function JournalSection({ onReadArticle }) {
   const longCount = storiesList.filter((e) => e.type === "longstory").length;
   const poemCount = storiesList.filter((e) => e.type === "poem").length;
   const essayCount = storiesList.filter((e) => e.type === "essay").length;
-
-  // Active coverflow index
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [lyricIndex, setLyricIndex] = useState(0);
-  const [progress, setProgress] = useState(20);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isQueueOpen, setIsQueueOpen] = useState(false);
-  const [isReaderOpen, setIsReaderOpen] = useState(false);
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200
-  );
 
   const activeEssay = filteredEssays[activeIndex] || filteredEssays[0] || storiesList[0];
   
@@ -227,7 +181,7 @@ export function JournalSection({ onReadArticle }) {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (isReaderOpen || isSyncModalOpen) return;
+      if (isReaderOpen) return;
       if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
       if (e.key === "ArrowLeft") {
         handlePrev();
@@ -240,7 +194,7 @@ export function JournalSection({ onReadArticle }) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeIndex, isPlaying, isReaderOpen, isSyncModalOpen, filteredEssays.length]);
+  }, [activeIndex, isPlaying, isReaderOpen, filteredEssays.length]);
 
   const handlePrev = () => {
     if (filteredEssays.length <= 1) return;
@@ -403,38 +357,10 @@ export function JournalSection({ onReadArticle }) {
             </p>
           </div>
 
-          {/* Right Header Badges: Google Sheet Connect & Reader Pill */}
-          <div className="flex flex-wrap items-center gap-2">
-            
-            {/* Google Sheets Connect & Sync Pill */}
-            <button
-              onClick={() => setIsSyncModalOpen(true)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-mono transition-all border cursor-pointer ${
-                sheetSyncStatus === "success"
-                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/35 hover:scale-105"
-                  : isLoadingSheet
-                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/35 animate-pulse"
-                  : "ios-glass-pill text-[#5e5953] dark:text-[#a9a5b8] hover:text-[#202020] dark:hover:text-white hover:border-[#b18a79]/40"
-              }`}
-              title="Connect or Sync your Google Sheet / Google Drive"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>
-                {sheetSyncStatus === "success" 
-                  ? "Google Sheet Synced" 
-                  : isLoadingSheet 
-                  ? "Syncing Sheet..." 
-                  : "Google Sheet Sync"}
-              </span>
-              {sheetSyncStatus === "success" && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </button>
-
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full ios-glass-pill text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
-              <BookOpen className="w-3.5 h-3.5 text-amber-500 dark:text-[#e5c07b]" />
-              <span>Book Reader</span>
-            </div>
+          {/* Right Header: Subtle Reader Pill */}
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full ios-glass-pill text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
+            <BookOpen className="w-3.5 h-3.5 text-amber-500 dark:text-[#e5c07b]" />
+            <span>Interactive Paginated Book Reader</span>
           </div>
         </div>
 
@@ -594,7 +520,7 @@ export function JournalSection({ onReadArticle }) {
                   }}
                   title={isActive ? "Click card to open Paginated Book Reader" : `Select ${essay.title}`}
                 >
-                  {/* Background Artwork Image (Supports Google Drive image URLs) */}
+                  {/* Background Artwork Image */}
                   <img
                     src={cardCover}
                     alt={essay.title}
@@ -672,12 +598,12 @@ export function JournalSection({ onReadArticle }) {
                     {/* Subtle Cue Prompt at Bottom of Box */}
                     <div className="pt-3 mt-1 border-t border-white/15 flex items-center justify-between text-[10px] sm:text-[11px] font-mono text-white/60">
                       <span className="flex items-center gap-1.5">
-                        <BookOpen className="w-3 h-3 text-amber-400" />
+                        <BookOpen className="w-3.5 h-3.5 text-amber-400" />
                         <span>Click to read pages</span>
                       </span>
 
                       <span className="flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity">
-                        <Maximize2 className="w-3 h-3" />
+                        <Maximize2 className="w-3.5 h-3.5" />
                         <span>Open Book</span>
                       </span>
                     </div>
@@ -843,19 +769,6 @@ export function JournalSection({ onReadArticle }) {
             {/* Right Utility Action Buttons */}
             <div className="flex items-center gap-1 sm:gap-2 pr-1 sm:pr-2 shrink-0 text-[#303030] dark:text-white/80">
               
-              {/* Google Sheets Sync Indicator Button */}
-              <button
-                onClick={() => setIsSyncModalOpen(true)}
-                className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${
-                  sheetSyncStatus === "success" 
-                    ? "text-emerald-500 hover:bg-emerald-500/10" 
-                    : "hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"
-                }`}
-                title="Google Sheet Live Sync"
-              >
-                <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-
               {/* Open Book Reader Button */}
               <button
                 onClick={() => setIsReaderOpen((prev) => !prev)}
@@ -909,141 +822,6 @@ export function JournalSection({ onReadArticle }) {
         isOpen={isReaderOpen}
         onClose={() => setIsReaderOpen(false)}
       />
-
-      {/* ============================================================== */}
-      {/* GOOGLE DRIVE & SHEETS LIVE SYNC MODAL                           */}
-      {/* Configure Google Sheet link & see column instructions          */}
-      {/* ============================================================== */}
-      {isSyncModalOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsSyncModalOpen(false);
-          }}
-        >
-          <div className="relative w-full max-w-xl bg-[#fdfcf9] dark:bg-[#161822] border border-[#dbd2c4] dark:border-[#38374d] rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-left">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[#dbd2c4] dark:border-white/10">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                  <FileSpreadsheet className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-serif text-lg sm:text-xl font-semibold text-[#202020] dark:text-[#f3f2f7]">
-                    Google Sheet & Drive Sync
-                  </h3>
-                  <p className="text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
-                    Load stories dynamically without uploading to GitHub
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsSyncModalOpen(false)}
-                className="p-1.5 rounded-lg text-[#5e5953] dark:text-[#a9a5b8] hover:text-[#202020] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Input Form */}
-            <div className="space-y-3">
-              <label className="block text-xs font-mono uppercase tracking-wider font-semibold text-[#202020] dark:text-[#f3f2f7]">
-                Google Sheet Link or Sheet ID:
-              </label>
-              
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={customSheetUrl}
-                  onChange={(e) => setCustomSheetUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=sharing"
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-[#dbd2c4] dark:border-[#38374d] bg-white dark:bg-[#10121a] text-[#202020] dark:text-[#f3f2f7] text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                />
-
-                <button
-                  onClick={() => syncGoogleSheetStories(customSheetUrl)}
-                  disabled={isLoadingSheet || !customSheetUrl.trim()}
-                  className={`px-4 py-2.5 rounded-xl font-mono text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    isLoadingSheet
-                      ? "bg-emerald-500/50 text-white cursor-not-allowed"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95"
-                  }`}
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSheet ? "animate-spin" : ""}`} />
-                  <span>Sync</span>
-                </button>
-              </div>
-
-              {/* Status Message */}
-              {sheetSyncStatus === "success" && (
-                <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Successfully synced {storiesList.length} stories from your Google Sheet!</span>
-                </div>
-              )}
-
-              {sheetSyncStatus === "error" && (
-                <div className="flex items-start gap-2 text-xs font-mono text-red-600 dark:text-red-400 bg-red-500/10 p-2.5 rounded-xl border border-red-500/20">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Sync Failed:</p>
-                    <p>{sheetErrorMessage || "Could not access sheet. Verify sharing is 'Anyone with the link can view'."}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Step-by-Step Instructions */}
-            <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-3 text-xs text-[#5e5953] dark:text-[#a9a5b8]">
-              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[11px] text-[#202020] dark:text-[#f3f2f7]">
-                <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
-                <span>How to Format Your Google Sheet (Method 2 & 3)</span>
-              </div>
-
-              <div className="space-y-1.5 font-sans leading-relaxed">
-                <p>
-                  <strong className="text-[#202020] dark:text-white">1. Column Headers (Row 1):</strong> Make sure row 1 has columns named:
-                </p>
-                <div className="p-2 rounded-lg bg-white dark:bg-black/40 font-mono text-[11px] border border-black/10 dark:border-white/10 text-emerald-600 dark:text-emerald-300">
-                  Title · Category · SummaryLyrics · Content · CoverImage
-                </div>
-
-                <p>
-                  <strong className="text-[#202020] dark:text-white">2. Category values:</strong> Use <code className="font-mono text-amber-600 dark:text-amber-400">Short Story</code>, <code className="font-mono text-sky-600 dark:text-sky-400">Long Story</code>, or <code className="font-mono text-pink-600 dark:text-pink-400">Poem</code>.
-                </p>
-
-                <p>
-                  <strong className="text-[#202020] dark:text-white">3. Google Drive Cover Images (Method 3):</strong> In the <code className="font-mono">CoverImage</code> column, you can paste normal Google Drive image share links like:
-                </p>
-                <div className="p-2 rounded-lg bg-white dark:bg-black/40 font-mono text-[10px] break-all border border-black/10 dark:border-white/10 opacity-80">
-                  https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing
-                </div>
-                <p className="text-[11px] italic">
-                  The portfolio automatically converts it to a direct CDN image!
-                </p>
-
-                <p>
-                  <strong className="text-[#202020] dark:text-white">4. Share Settings:</strong> In Google Sheets, click <strong>Share</strong> and set to <strong>"Anyone with the link can view"</strong>.
-                </p>
-              </div>
-            </div>
-
-            {/* Permanent Code Config Note */}
-            <div className="pt-2 text-[11px] font-mono text-[#8f8880] dark:text-[#736f82] flex items-center justify-between">
-              <span>Permanently configure in: <code className="text-[#202020] dark:text-white font-bold">src/data/journalData.js</code></span>
-              <button
-                onClick={() => setIsSyncModalOpen(false)}
-                className="px-3 py-1 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-[#202020] dark:text-white"
-              >
-                Done
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </section>
   );
