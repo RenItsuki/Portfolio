@@ -68,7 +68,7 @@ const playAudioFeedback = (type = "click") => {
   }
 };
 
-export function JournalSection({ onReadArticle }) {
+export function JournalSection() {
   // Master stories state (starts with built-in essays, quietly updates from Google Sheet if configured)
   const [storiesList, setStoriesList] = useState(essays);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -223,7 +223,6 @@ export function JournalSection({ onReadArticle }) {
   const handleBoxClick = (index) => {
     if (index === activeIndex) {
       setIsReaderOpen(true);
-      if (onReadArticle) onReadArticle(activeEssay);
       playAudioFeedback("click");
     } else {
       playAudioFeedback("switch");

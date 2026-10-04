@@ -22,8 +22,19 @@ import { autoPaginateContent, parseLyrics, normalizeGoogleDriveImageUrl } from "
  * - Formats philosophical conclusions and literary drop caps
  */
 function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, accentColor = "#d97746", textPrimary = "") {
-  if (!text) return null;
-  const trimmed = text.trim();
+  if (text === undefined || text === null) return null;
+  const trimmed = typeof text === "string" ? text.trim() : String(text).trim();
+
+  // 0. Blank line / Paragraph Spacer: preserve visual gaps from Google Sheets
+  if (!trimmed) {
+    return (
+      <div 
+        key={`spacer-${index}`} 
+        className="h-4 sm:h-5 w-full select-none" 
+        aria-hidden="true" 
+      />
+    );
+  }
 
   // 1. Philosophical / Inspirational Closing Callouts
   if (
@@ -44,7 +55,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
           <Sparkles className="w-3.5 h-3.5" />
           <span>Reflections & Epilogue</span>
         </div>
-        <p className="opacity-95 leading-relaxed">
+        <p className="opacity-95 leading-relaxed whitespace-pre-line">
           "{trimmed}"
         </p>
       </blockquote>
@@ -64,7 +75,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
       >
         <div className="flex items-center gap-2 font-bold uppercase tracking-widest text-[11px]" style={{ color: accentColor }}>
           <Sparkles className="w-3.5 h-3.5" />
-          <span>{trimmed.replace(/^\[|\]$/g, "")}</span>
+          <span className="whitespace-pre-line">{trimmed.replace(/^\[|\]$/g, "")}</span>
         </div>
       </div>
     );
@@ -89,7 +100,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
         <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider font-bold text-amber-700 dark:text-amber-400 not-italic mb-1">
           <span>Scene Atmosphere</span>
         </div>
-        <p>{cleanScene}</p>
+        <p className="whitespace-pre-line">{cleanScene}</p>
       </div>
     );
   }
@@ -110,7 +121,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
     return (
       <div key={index} className="my-2.5 py-0.5 text-xs font-mono italic opacity-70 flex items-center gap-2 text-amber-700 dark:text-amber-300 select-none">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500/70 shrink-0" />
-        <span>{cleanDirection}</span>
+        <span className="whitespace-pre-line">{cleanDirection}</span>
       </div>
     );
   }
@@ -120,7 +131,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
     return (
       <div key={index} className="flex items-start gap-2.5 my-2 pl-3 font-mono text-xs sm:text-sm leading-relaxed opacity-90 text-left select-none">
         <span className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ backgroundColor: accentColor }} />
-        <span>{trimmed.replace(/^[•-]\s*/, "")}</span>
+        <span className="whitespace-pre-line">{trimmed.replace(/^[•-]\s*/, "")}</span>
       </div>
     );
   }
@@ -162,7 +173,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
             </span>
           )}
         </div>
-        <p className={`font-serif leading-relaxed text-sm sm:text-base opacity-95 text-left mt-1 ${textPrimary}`}>
+        <p className={`font-serif leading-relaxed text-sm sm:text-base opacity-95 text-left mt-1 whitespace-pre-line ${textPrimary}`}>
           {speech}
         </p>
       </div>
@@ -173,7 +184,7 @@ function renderFormattedStoryParagraph(text, index, isFirstOfChapter = false, ac
   return (
     <p 
       key={index} 
-      className={`leading-relaxed my-3 font-serif text-justify select-none ${textPrimary} ${
+      className={`leading-relaxed my-3 font-serif text-justify select-none whitespace-pre-line ${textPrimary} ${
         isFirstOfChapter && index === 0 
           ? "first-letter:text-3xl first-letter:font-bold first-letter:mr-1 first-letter:float-left first-letter:leading-none" 
           : ""
@@ -240,9 +251,9 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
   if (!isOpen || !article) return null;
 
   // Extract or synthesize pages (using intelligent auto-pagination for Google Sheets & raw text)
-  const pages = article?.pages && article.pages.length > 0 
-    ? article.pages 
-    : autoPaginateContent(article?.title, article?.subtitle, article?.content || article?.excerpt || "");
+  const pages = (article?.isFromGoogleSheet || !article?.pages || article.pages.length === 0)
+    ? autoPaginateContent(article?.title, article?.subtitle, article?.content || article?.excerpt || "")
+    : article.pages;
 
   const totalPages = Math.max(1, pages.length);
 

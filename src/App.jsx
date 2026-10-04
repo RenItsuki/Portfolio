@@ -9,7 +9,6 @@ import { Footer } from "./components/Footer";
 import { LiveMiniPreviewModal } from "./components/LiveMiniPreviewModal";
 import { VideoPreviewModal } from "./components/VideoPreviewModal";
 import { PhotoLightbox } from "./components/PhotoLightbox";
-import { JournalReaderModal } from "./components/JournalReaderModal";
 import CanvasCursor from "./components/CanvasCursor";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 import { caseStudies, photoSeries, essays } from "./data/portfolioData";
@@ -33,7 +32,6 @@ export function App() {
   const [livePreviewProject, setLivePreviewProject] = useState(null);
   const [videoDemoProject, setVideoDemoProject] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
-  const [activeArticle, setActiveArticle] = useState(null);
 
   // Synchronize theme with <html> element and data-theme attribute
   useEffect(() => {
@@ -86,7 +84,7 @@ export function App() {
         <PhotoGallery onSelectPhoto={handleOpenPhoto} />
 
         {/* Field Notes & Journal */}
-        <JournalSection onReadArticle={(article) => setActiveArticle(article)} />
+        <JournalSection />
 
         {/* Connect & Social Media Presence */}
         <ContactSection />
@@ -120,13 +118,6 @@ export function App() {
         isOpen={lightboxIndex !== null}
         onClose={() => setLightboxIndex(null)}
         onNavigate={(newIdx) => setLightboxIndex(newIdx)}
-      />
-
-      {/* Journal Essay Reader Modal */}
-      <JournalReaderModal
-        article={activeArticle}
-        isOpen={!!activeArticle}
-        onClose={() => setActiveArticle(null)}
       />
     </div>
   );

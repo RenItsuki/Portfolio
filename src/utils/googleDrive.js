@@ -108,17 +108,30 @@ export function parseLyrics(input, fallbackExcerpt = "") {
 
 /**
  * Automatically splits long story prose or screenplay text into balanced book pages for the reader.
- * Handles single Alt+Enter dialogue lines, double-spaced paragraphs, and major scene breaks.
+ * Handles both double-spaced paragraphs and single Alt+Enter dialogue lines, preserving line breaks.
  */
 export function autoPaginateContent(title, subtitle, contentText) {
   if (!contentText) return [];
 
-  // Normalize all line breaks from Google Sheets (Alt+Enter = \r\n or \n)
+  // Normalize all line breaks from Google Sheets (Alt+Enter = \r\n, \n, or \r)
   const normalized = contentText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   if (!normalized) return [];
 
-  // Split into individual non-empty lines / blocks
-  const rawLines = normalized.split("\n").map((l) => l.trim()).filter(Boolean);
+  // Split into lines
+  const lines = normalized.split("\n").map((l) => l.trim());
+
+  // Collapse 3+ consecutive blank lines down to at most 1 blank line
+  const rawLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === "") {
+      if (rawLines.length > 0 && rawLines[rawLines.length - 1] !== "") {
+        rawLines.push("");
+      }
+    } else {
+      rawLines.push(lines[i]);
+    }
+  }
+
   if (rawLines.length === 0) return [];
 
   // Group lines into readable pages of ~10-15 dialogue blocks or ~220 words
@@ -129,7 +142,7 @@ export function autoPaginateContent(title, subtitle, contentText) {
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
-    const words = line.split(/\s+/).length;
+    const words = line ? line.split(/\s+/).length : 0;
 
     // Check if line indicates a major scene transition
     const isMajorBreak = 
@@ -139,19 +152,37 @@ export function autoPaginateContent(title, subtitle, contentText) {
       line.startsWith("[Act") ||
       line.startsWith("[Scene");
 
-    if ((currentWords + words > 220 || isMajorBreak) && currentBlocks.length >= 5) {
-      pages.push({
-        pageNumber,
-        chapter: pageNumber === 1 ? (subtitle || `${title} · Part I`) : `${title} · Part ${pageNumber}`,
-        content: currentBlocks
-      });
-      pageNumber++;
-      currentBlocks = [line];
+    if ((currentWords + words > 220 || isMajorBreak) && currentBlocks.length >= 4) {
+      // Trim any trailing blank line from previous page
+      while (currentBlocks.length > 0 && currentBlocks[currentBlocks.length - 1] === "") {
+        currentBlocks.pop();
+      }
+
+      if (currentBlocks.length > 0) {
+        pages.push({
+          pageNumber,
+          chapter: pageNumber === 1 ? (subtitle || `${title} · Part I`) : `${title} · Part ${pageNumber}`,
+          content: currentBlocks
+        });
+        pageNumber++;
+      }
+
+      // Do not start a new page with an empty blank line
+      currentBlocks = line === "" ? [] : [line];
       currentWords = words;
     } else {
+      // Do not start an empty page with an empty line
+      if (line === "" && currentBlocks.length === 0) {
+        continue;
+      }
       currentBlocks.push(line);
       currentWords += words;
     }
+  }
+
+  // Trim any trailing blank line from final page
+  while (currentBlocks.length > 0 && currentBlocks[currentBlocks.length - 1] === "") {
+    currentBlocks.pop();
   }
 
   if (currentBlocks.length > 0) {
@@ -210,9 +241,10 @@ export async function fetchStoriesFromGoogleSheet(sheetUrlOrId) {
     throw new Error("Invalid Google Sheet link or ID. Please check the URL.");
   }
 
-  const endpoint = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+  // Cache busting query parameter & no-store cache to ensure real-time Google Sheet edits load instantly
+  const endpoint = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&_t=${Date.now()}`;
 
-  const response = await fetch(endpoint);
+  const response = await fetch(endpoint, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Google Sheet request failed with status: ${response.status}`);
   }
