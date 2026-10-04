@@ -1,11 +1,36 @@
 /**
  * ============================================================================
- * GOOGLE DRIVE & GOOGLE SHEETS CONNECTOR (METHOD 2 & 3)
+ * GOOGLE DRIVE & GOOGLE SHEETS CONNECTOR (CMS POWERED FOR ENTIRE PORTFOLIO)
  * ============================================================================
  * 
- * - Method 2: Loads stories dynamically from a public Google Sheet
+ * - Stories: Dynamically loads stories & screenplay formatting
+ * - Projects: Dynamically loads case studies & live quest constellation
+ * - Photography: Dynamically loads photos, auto-generates albums & EXIF
+ * - Skills: Dynamically loads celestial astrolabe skills & perks
  * - Method 3: Converts Google Drive file share links into high-speed direct CDN images
  */
+
+import {
+  Code2,
+  Palette,
+  Megaphone,
+  Globe,
+  Camera,
+  Sparkles,
+  Users,
+  Cpu,
+  Layers,
+  Terminal,
+  Shield,
+  Zap,
+  Flame,
+  Scroll,
+  Compass,
+  Brain,
+  Database,
+  Wrench,
+  BookOpen
+} from "lucide-react";
 
 /**
  * Extracts the Google Sheet ID from any Google Sheet URL or raw ID
@@ -351,3 +376,482 @@ export async function fetchStoriesFromGoogleSheet(sheetUrlOrId) {
 
   return stories;
 }
+
+/**
+ * ============================================================================
+ * 🛠️ PROJECTS & CASE STUDIES FROM GOOGLE SHEET
+ * ============================================================================
+ */
+export async function fetchProjectsFromGoogleSheet(sheetUrlOrId, tabName = "Projects") {
+  const sheetId = extractGoogleSheetId(sheetUrlOrId);
+  if (!sheetId) return [];
+
+  const tabParam = tabName ? `&sheet=${encodeURIComponent(tabName)}` : "";
+  const endpoint = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json${tabParam}&_t=${Date.now()}`;
+
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) return [];
+
+    const rawText = await response.text();
+    const jsonMatch = rawText.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?$/);
+    if (!jsonMatch || !jsonMatch[1]) return [];
+
+    const parsed = JSON.parse(jsonMatch[1]);
+    const table = parsed.table;
+    if (!table || !table.rows || table.rows.length === 0) return [];
+
+    // Map header column indices
+    const headers = {};
+    table.cols.forEach((col, idx) => {
+      if (col && col.label) {
+        headers[col.label.toLowerCase().replace(/[^a-z0-9]/g, "")] = idx;
+      }
+    });
+
+    let startRowIndex = 0;
+    const firstRowCells = table.rows[0]?.c || [];
+    const hasHeaderRow = firstRowCells.some(
+      (cell) => cell && typeof cell.v === "string" && ["title", "project", "name", "role", "summary", "category"].includes(cell.v.toLowerCase().trim())
+    );
+
+    if (hasHeaderRow) {
+      firstRowCells.forEach((cell, idx) => {
+        if (cell && cell.v) {
+          const key = String(cell.v).toLowerCase().replace(/[^a-z0-9]/g, "");
+          headers[key] = idx;
+        }
+      });
+      startRowIndex = 1;
+    }
+
+    // Safety check: verify this is actually a Projects sheet and not Google fallback to Sheet1
+    const isProjectSheet = 
+      headers["role"] !== undefined || 
+      headers["summary"] !== undefined || 
+      headers["posterimage"] !== undefined || 
+      headers["demourl"] !== undefined || 
+      headers["githuburl"] !== undefined || 
+      headers["tags"] !== undefined ||
+      headers["impact"] !== undefined;
+
+    if (!isProjectSheet) {
+      return [];
+    }
+
+    const getVal = (row, ...aliases) => {
+      for (const alias of aliases) {
+        const idx = headers[alias];
+        if (idx !== undefined && row.c && row.c[idx] && row.c[idx].v !== null && row.c[idx].v !== undefined) {
+          return String(row.c[idx].v).trim();
+        }
+      }
+      return "";
+    };
+
+    const projects = [];
+
+    for (let r = startRowIndex; r < table.rows.length; r++) {
+      const row = table.rows[r];
+      if (!row || !row.c) continue;
+
+      const title = getVal(row, "title", "name", "project", "heading");
+      if (!title) continue;
+
+      const subtitle = getVal(row, "subtitle", "tagline", "pitch");
+      const category = getVal(row, "category", "sector", "field", "type") || "Edge AI & Computer Vision";
+      const year = getVal(row, "year", "date") || "2026";
+      const role = getVal(row, "role", "position") || "Lead Architect";
+      const summary = getVal(row, "summary", "description", "body", "about");
+      const impact = getVal(row, "impact", "metric", "result", "outcome");
+      const rawTags = getVal(row, "tags", "tech", "technologies", "skills");
+      const tags = rawTags ? rawTags.split(/[,|;]+/).map((t) => t.trim()).filter(Boolean) : ["AI", "Web", "Design"];
+      const rawImage = getVal(row, "posterimage", "image", "cover", "photo", "img", "thumbnail");
+      const posterImage = normalizeGoogleDriveImageUrl(rawImage);
+      const videoPreviewUrl = getVal(row, "videopreviewurl", "videourl", "video");
+      const demoUrl = getVal(row, "demourl", "liveurl", "url", "link", "site");
+      const githubUrl = getVal(row, "githuburl", "repo", "github", "source");
+      const rawHighlights = getVal(row, "highlights", "keypoints", "features");
+      const highlights = rawHighlights ? rawHighlights.split(/[\n|;]+/).map((h) => h.trim().replace(/^[-•*]\s*/, "")).filter(Boolean) : [];
+      const previewType = getVal(row, "previewtype", "simulator") || "iframe";
+
+      projects.push({
+        id: `proj-${r}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        title,
+        subtitle: subtitle || category,
+        category,
+        year,
+        role,
+        summary: summary || subtitle || title,
+        impact: impact || `${year} Production Deployment`,
+        tags,
+        posterImage,
+        videoPreviewUrl: videoPreviewUrl || "",
+        videoPlaceholder: posterImage,
+        demoUrl: demoUrl || githubUrl || "",
+        githubUrl: githubUrl || demoUrl || "",
+        previewType,
+        highlights: highlights.length > 0 ? highlights : [
+          "High-performance architecture with modern reactive interface",
+          "Responsive cross-device design with fluid interactions",
+          "Optimized execution and graceful degradation"
+        ],
+        isFromGoogleSheet: true
+      });
+    }
+
+    return projects;
+  } catch (err) {
+    console.warn("Could not load Google Sheet projects:", err);
+    return [];
+  }
+}
+
+/**
+ * ============================================================================
+ * 📸 FIELD PHOTOGRAPHY FROM GOOGLE SHEET
+ * ============================================================================
+ */
+export async function fetchPhotosFromGoogleSheet(sheetUrlOrId, tabName = "Photos") {
+  const sheetId = extractGoogleSheetId(sheetUrlOrId);
+  if (!sheetId) return [];
+
+  const tabParam = tabName ? `&sheet=${encodeURIComponent(tabName)}` : "";
+  const endpoint = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json${tabParam}&_t=${Date.now()}`;
+
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) return [];
+
+    const rawText = await response.text();
+    const jsonMatch = rawText.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?$/);
+    if (!jsonMatch || !jsonMatch[1]) return [];
+
+    const parsed = JSON.parse(jsonMatch[1]);
+    const table = parsed.table;
+    if (!table || !table.rows || table.rows.length === 0) return [];
+
+    const headers = {};
+    table.cols.forEach((col, idx) => {
+      if (col && col.label) {
+        headers[col.label.toLowerCase().replace(/[^a-z0-9]/g, "")] = idx;
+      }
+    });
+
+    let startRowIndex = 0;
+    const firstRowCells = table.rows[0]?.c || [];
+    const hasHeaderRow = firstRowCells.some(
+      (cell) => cell && typeof cell.v === "string" && ["title", "photo", "image", "imageurl", "driveurl", "location"].includes(cell.v.toLowerCase().trim())
+    );
+
+    if (hasHeaderRow) {
+      firstRowCells.forEach((cell, idx) => {
+        if (cell && cell.v) {
+          const key = String(cell.v).toLowerCase().replace(/[^a-z0-9]/g, "");
+          headers[key] = idx;
+        }
+      });
+      startRowIndex = 1;
+    }
+
+    // Safety check: verify this is actually a Photos sheet
+    const isPhotoSheet = 
+      headers["imageurl"] !== undefined || 
+      headers["image"] !== undefined || 
+      headers["photo"] !== undefined || 
+      headers["driveurl"] !== undefined || 
+      headers["album"] !== undefined || 
+      headers["location"] !== undefined;
+
+    if (!isPhotoSheet) {
+      return [];
+    }
+
+    const getVal = (row, ...aliases) => {
+      for (const alias of aliases) {
+        const idx = headers[alias];
+        if (idx !== undefined && row.c && row.c[idx] && row.c[idx].v !== null && row.c[idx].v !== undefined) {
+          return String(row.c[idx].v).trim();
+        }
+      }
+      return "";
+    };
+
+    const photos = [];
+
+    for (let r = startRowIndex; r < table.rows.length; r++) {
+      const row = table.rows[r];
+      if (!row || !row.c) continue;
+
+      const rawImage = getVal(row, "imageurl", "image", "photo", "driveurl", "pic", "link", "url");
+      if (!rawImage) continue;
+
+      const title = getVal(row, "title", "name", "caption") || "Field Photograph";
+      const category = getVal(row, "category", "genre", "type") || "Scenery";
+      const album = getVal(row, "album", "series", "collection") || "Field Visuals";
+      const location = getVal(row, "location", "place") || "Field Sanctuary";
+      const cityRegion = getVal(row, "cityregion", "city", "region", "state", "country") || "India";
+      const coordinates = getVal(row, "coordinates", "gps") || "22.5726° N, 88.3639° E";
+      const capturedDate = getVal(row, "date", "captureddate", "time") || "Recent Archive";
+      const year = getVal(row, "year") || (capturedDate.match(/\d{4}/)?.[0] || "2026");
+      const aspect = getVal(row, "aspect", "orientation")?.toLowerCase() || "landscape";
+      const rawTags = getVal(row, "tags", "keywords");
+      const tags = rawTags ? rawTags.split(/[,|;]+/).map((t) => t.trim()).filter(Boolean) : [category, album];
+      const note = getVal(row, "note", "description", "caption", "story") || "";
+      const backupStatus = getVal(row, "backupstatus", "backup", "exif") || "Google Drive CDN Synchronized";
+
+      const imageUrl = normalizeGoogleDriveImageUrl(rawImage);
+      const rawThumb = getVal(row, "thumbnailurl", "thumbnail", "thumb");
+      const thumbnailUrl = rawThumb ? normalizeGoogleDriveImageUrl(rawThumb) : imageUrl;
+
+      photos.push({
+        id: `photo-${r}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        title,
+        album,
+        category,
+        location,
+        cityRegion,
+        coordinates,
+        capturedDate,
+        year,
+        imageUrl,
+        thumbnailUrl,
+        aspect,
+        tags,
+        backupStatus,
+        note,
+        isFromGoogleSheet: true
+      });
+    }
+
+    return photos;
+  } catch (err) {
+    console.warn("Could not load Google Sheet photos:", err);
+    return [];
+  }
+}
+
+/**
+ * Derives album series dynamically from any photo array (auto-detects albums & covers)
+ */
+export function deriveAlbumsFromPhotos(photosList = []) {
+  if (!photosList || photosList.length === 0) return [];
+  const albumsMap = new Map();
+  photosList.forEach((photo) => {
+    const albumName = photo.album || "Field Archive";
+    if (!albumsMap.has(albumName)) {
+      albumsMap.set(albumName, {
+        id: `album-${albumName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        title: albumName,
+        category: photo.category || "Field Archive",
+        location: photo.location || photo.cityRegion || "Field Location",
+        year: photo.year || "2026",
+        coverPhoto: photo.imageUrl,
+        collagePhotos: [photo.imageUrl],
+        count: 0,
+        photoCount: 0,
+        description: photo.note || `A curated photographic series documenting ${albumName.toLowerCase()}.`,
+        accentColor: "#b18a79"
+      });
+    }
+    const albumObj = albumsMap.get(albumName);
+    albumObj.count++;
+    albumObj.photoCount++;
+    if (albumObj.collagePhotos.length < 3 && !albumObj.collagePhotos.includes(photo.imageUrl)) {
+      albumObj.collagePhotos.push(photo.imageUrl);
+    }
+  });
+  return Array.from(albumsMap.values());
+}
+
+/**
+ * ============================================================================
+ * ⚡ SKILLS & MASTERY TREE FROM GOOGLE SHEET
+ * ============================================================================
+ */
+export async function fetchSkillsFromGoogleSheet(sheetUrlOrId, tabName = "Skills") {
+  const sheetId = extractGoogleSheetId(sheetUrlOrId);
+  if (!sheetId) return [];
+
+  const tabParam = tabName ? `&sheet=${encodeURIComponent(tabName)}` : "";
+  const endpoint = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json${tabParam}&_t=${Date.now()}`;
+
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) return [];
+
+    const rawText = await response.text();
+    const jsonMatch = rawText.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?$/);
+    if (!jsonMatch || !jsonMatch[1]) return [];
+
+    const parsed = JSON.parse(jsonMatch[1]);
+    const table = parsed.table;
+    if (!table || !table.rows || table.rows.length === 0) return [];
+
+    const headers = {};
+    table.cols.forEach((col, idx) => {
+      if (col && col.label) {
+        headers[col.label.toLowerCase().replace(/[^a-z0-9]/g, "")] = idx;
+      }
+    });
+
+    let startRowIndex = 0;
+    const firstRowCells = table.rows[0]?.c || [];
+    const hasHeaderRow = firstRowCells.some(
+      (cell) => cell && typeof cell.v === "string" && ["name", "skill", "level", "rating", "perk", "tagline"].includes(cell.v.toLowerCase().trim())
+    );
+
+    if (hasHeaderRow) {
+      firstRowCells.forEach((cell, idx) => {
+        if (cell && cell.v) {
+          const key = String(cell.v).toLowerCase().replace(/[^a-z0-9]/g, "");
+          headers[key] = idx;
+        }
+      });
+      startRowIndex = 1;
+    }
+
+    // Safety check: verify this is actually a Skills sheet
+    const isSkillSheet = 
+      headers["level"] !== undefined || 
+      headers["rating"] !== undefined || 
+      headers["perk"] !== undefined || 
+      headers["tagline"] !== undefined ||
+      headers["skill"] !== undefined;
+
+    if (!isSkillSheet) {
+      return [];
+    }
+
+    const getVal = (row, ...aliases) => {
+      for (const alias of aliases) {
+        const idx = headers[alias];
+        if (idx !== undefined && row.c && row.c[idx] && row.c[idx].v !== null && row.c[idx].v !== undefined) {
+          return String(row.c[idx].v).trim();
+        }
+      }
+      return "";
+    };
+
+    const skillsList = [];
+
+    for (let r = startRowIndex; r < table.rows.length; r++) {
+      const row = table.rows[r];
+      if (!row || !row.c) continue;
+
+      const name = getVal(row, "name", "skill", "title");
+      if (!name) continue;
+
+      const level = getVal(row, "level", "grade", "lv") || "Lv. 99";
+      const tagline = getVal(row, "tagline", "description", "summary") || "Mastery in field craft and execution.";
+      const rating = getVal(row, "rating", "stars") || "★★★★★";
+      const perk = getVal(row, "perk", "specialty", "highlight") || "Field Expertise & Architecture";
+      const manaCost = getVal(row, "manacost", "metric", "cost") || "Production Ready";
+      const cooldown = getVal(row, "cooldown", "cadence") || "Continuous";
+      const colorKey = getVal(row, "color", "theme", "gradient");
+      const iconKey = getVal(row, "icon", "symbol");
+      const rawAngle = getVal(row, "angle", "position");
+
+      const colorConfig = getSkillColorConfig(colorKey, r);
+      const IconComp = getSkillIcon(iconKey, name);
+
+      skillsList.push({
+        id: `skill-${r}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        name,
+        level,
+        angle: rawAngle ? parseFloat(rawAngle) : undefined,
+        icon: IconComp,
+        color: colorConfig.color,
+        bgLight: colorConfig.bgLight,
+        bgDark: colorConfig.bgDark,
+        tagline,
+        manaCost,
+        cooldown,
+        perk,
+        rating,
+        isFromGoogleSheet: true
+      });
+    }
+
+    return skillsList;
+  } catch (err) {
+    console.warn("Could not load Google Sheet skills:", err);
+    return [];
+  }
+}
+
+/**
+ * Intelligent Icon matcher for skills from Google Sheet keywords
+ */
+export function getSkillIcon(iconKey = "", skillName = "") {
+  const key = `${iconKey} ${skillName}`.toLowerCase();
+  if (key.includes("code") || key.includes("dev") || key.includes("program") || key.includes("software")) return Code2;
+  if (key.includes("palette") || key.includes("design") || key.includes("3d") || key.includes("art") || key.includes("ui") || key.includes("ux")) return Palette;
+  if (key.includes("megaphone") || key.includes("market") || key.includes("growth") || key.includes("media") || key.includes("pr")) return Megaphone;
+  if (key.includes("globe") || key.includes("outreach") || key.includes("network") || key.includes("world")) return Globe;
+  if (key.includes("camera") || key.includes("photo") || key.includes("optics") || key.includes("video")) return Camera;
+  if (key.includes("cpu") || key.includes("ai") || key.includes("ml") || key.includes("deep") || key.includes("neural")) return Cpu;
+  if (key.includes("layers") || key.includes("system") || key.includes("architect")) return Layers;
+  if (key.includes("terminal") || key.includes("cli") || key.includes("backend") || key.includes("cloud")) return Terminal;
+  if (key.includes("shield") || key.includes("sec") || key.includes("cyber")) return Shield;
+  if (key.includes("zap") || key.includes("speed") || key.includes("perf")) return Zap;
+  if (key.includes("brain")) return Brain;
+  if (key.includes("data") || key.includes("sql")) return Database;
+  if (key.includes("users") || key.includes("team") || key.includes("lead")) return Users;
+  return Sparkles;
+}
+
+/**
+ * Color and styling matcher for celestial skill nodes
+ */
+export function getSkillColorConfig(colorKey = "", index = 0) {
+  const palette = [
+    {
+      color: "from-amber-400 to-orange-500",
+      bgLight: "bg-amber-100/90 text-amber-900 border-amber-400/60",
+      bgDark: "dark:bg-amber-950/80 dark:text-amber-200 dark:border-amber-400/50"
+    },
+    {
+      color: "from-purple-400 to-pink-500",
+      bgLight: "bg-purple-100/90 text-purple-900 border-purple-400/60",
+      bgDark: "dark:bg-purple-950/80 dark:text-purple-200 dark:border-purple-400/50"
+    },
+    {
+      color: "from-emerald-400 to-teal-500",
+      bgLight: "bg-emerald-100/90 text-emerald-900 border-emerald-400/60",
+      bgDark: "dark:bg-emerald-950/80 dark:text-emerald-200 dark:border-emerald-400/50"
+    },
+    {
+      color: "from-sky-400 to-blue-500",
+      bgLight: "bg-sky-100/90 text-sky-900 border-sky-400/60",
+      bgDark: "dark:bg-sky-950/80 dark:text-sky-200 dark:border-sky-400/50"
+    },
+    {
+      color: "from-violet-500 to-indigo-600",
+      bgLight: "bg-violet-100/90 text-violet-900 border-violet-400/60",
+      bgDark: "dark:bg-violet-950/80 dark:text-violet-200 dark:border-violet-400/50"
+    },
+    {
+      color: "from-rose-400 to-red-500",
+      bgLight: "bg-rose-100/90 text-rose-900 border-rose-400/60",
+      bgDark: "dark:bg-rose-950/80 dark:text-rose-200 dark:border-rose-400/50"
+    },
+    {
+      color: "from-amber-600 to-yellow-600",
+      bgLight: "bg-amber-50 text-amber-900 border-amber-600/40",
+      bgDark: "dark:bg-yellow-950/70 dark:text-amber-200 dark:border-yellow-600/50"
+    }
+  ];
+
+  const key = (colorKey || "").toLowerCase();
+  if (key.includes("amber") || key.includes("orange")) return palette[0];
+  if (key.includes("purple") || key.includes("pink")) return palette[1];
+  if (key.includes("emerald") || key.includes("green") || key.includes("teal")) return palette[2];
+  if (key.includes("sky") || key.includes("blue") || key.includes("cyan")) return palette[3];
+  if (key.includes("violet") || key.includes("indigo")) return palette[4];
+  if (key.includes("rose") || key.includes("red")) return palette[5];
+  if (key.includes("yellow")) return palette[6];
+
+  return palette[index % palette.length];
+}
+

@@ -36,8 +36,11 @@ import {
 } from "lucide-react";
 import { 
   caseStudies, 
-  projectCategories 
+  projectCategories,
+  GOOGLE_SHEETS_PROJECTS_URL,
+  GOOGLE_SHEETS_PROJECTS_TAB
 } from "../data/projectsData";
+import { fetchProjectsFromGoogleSheet } from "../utils/googleDrive";
 
 // Category-to-icon helper
 const getCategoryIcon = (category = "") => {
@@ -145,13 +148,30 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
+  // Dynamic projects list loaded from Google Sheet (placeholders removed)
+  const [projectsList, setProjectsList] = useState(caseStudies);
+
+  useEffect(() => {
+    if (GOOGLE_SHEETS_PROJECTS_URL) {
+      fetchProjectsFromGoogleSheet(GOOGLE_SHEETS_PROJECTS_URL, GOOGLE_SHEETS_PROJECTS_TAB)
+        .then((fetched) => {
+          if (fetched && fetched.length > 0) {
+            setProjectsList(fetched);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not load Google Sheet projects:", err);
+        });
+    }
+  }, []);
+
   // Filtered projects list
   const filteredProjects = useMemo(() => {
-    if (selectedCategory === "all") return caseStudies;
+    if (selectedCategory === "all") return projectsList;
     const catObj = projectCategories.find(c => c.id === selectedCategory);
     const matchTerm = (catObj?.match || selectedCategory).toLowerCase();
-    return caseStudies.filter(p => p.category.toLowerCase().includes(matchTerm));
-  }, [selectedCategory]);
+    return projectsList.filter(p => p.category.toLowerCase().includes(matchTerm));
+  }, [projectsList, selectedCategory]);
 
   // Layout calculation for the current filtered list (Project 0 always centered!)
   const layoutProjects = useMemo(() => {
@@ -411,7 +431,7 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
               <span className="font-bold">QUEST CONSTELLATION</span>
               <span className="text-neutral-400 dark:text-neutral-600">|</span>
               <span className="text-[#5e5953] dark:text-[#a9a5b8]">
-                {layoutProjects.length} of {caseStudies.length} Clustered
+                {layoutProjects.length} of {projectsList.length} Clustered
               </span>
             </div>
           </div>
@@ -576,6 +596,29 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
             {/* ============================================================ */}
             {/* Floating Project Orbs (Close, Non-Overlapping & Independent) */}
             {/* ============================================================ */}
+            {layoutProjects.length === 0 && (
+              <div
+                style={{
+                  left: "0px",
+                  top: "0px",
+                  transform: "translate(-50%, -50%)"
+                }}
+                className="absolute pointer-events-auto flex flex-col items-center text-center p-8 rounded-3xl bg-[#fdfcf9]/95 dark:bg-[#12141e]/95 backdrop-blur-xl border border-[#b18a79]/50 dark:border-[#e5c07b]/50 shadow-2xl max-w-sm"
+              >
+                <div className="w-16 h-16 rounded-full bg-[#b18a79]/15 dark:bg-[#e5c07b]/15 text-[#b18a79] dark:text-[#e5c07b] flex items-center justify-center mb-3">
+                  <Compass className="w-8 h-8 animate-spin" style={{ animationDuration: "20s" }} />
+                </div>
+                <h4 className="font-serif text-lg font-bold text-[#202020] dark:text-[#f3f2f7]">
+                  {selectedCategory === "all" ? "Quest Constellation Awaiting Inscription" : "No Quests in this Realm"}
+                </h4>
+                <p className="text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8] mt-2 leading-relaxed">
+                  {selectedCategory === "all"
+                    ? "Add your software works and case studies to the 'Projects' tab in your Google Sheet to populate this constellation."
+                    : "No projects match this category filter. Select 'ALL PROJECTS' or add new entries to your Google Sheet."}
+                </p>
+              </div>
+            )}
+
             {layoutProjects.map((project, index) => {
               const IconComponent = getCategoryIcon(project.category);
               const isCenterNode = index === 0;

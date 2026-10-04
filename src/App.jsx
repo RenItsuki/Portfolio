@@ -32,6 +32,7 @@ export function App() {
   const [livePreviewProject, setLivePreviewProject] = useState(null);
   const [videoDemoProject, setVideoDemoProject] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [photosList, setPhotosList] = useState([]);
 
   // Synchronize theme with <html> element and data-theme attribute
   useEffect(() => {
@@ -54,7 +55,10 @@ export function App() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
-  const handleOpenPhoto = (photo, index) => {
+  const handleOpenPhoto = (photo, index, list) => {
+    if (list && list.length > 0) {
+      setPhotosList(list);
+    }
     setLightboxIndex(index);
   };
 
@@ -81,7 +85,10 @@ export function App() {
         />
 
         {/* Photography & Field Visuals */}
-        <PhotoGallery onSelectPhoto={handleOpenPhoto} />
+        <PhotoGallery 
+          onSelectPhoto={handleOpenPhoto} 
+          onPhotosLoaded={setPhotosList} 
+        />
 
         {/* Field Notes & Journal */}
         <JournalSection />
@@ -113,9 +120,9 @@ export function App() {
 
       {/* Fullscreen Photo Lightbox with Camera Optics */}
       <PhotoLightbox
-        photos={photoSeries}
+        photos={photosList}
         currentIndex={lightboxIndex ?? 0}
-        isOpen={lightboxIndex !== null}
+        isOpen={lightboxIndex !== null && photosList.length > 0}
         onClose={() => setLightboxIndex(null)}
         onNavigate={(newIdx) => setLightboxIndex(newIdx)}
       />

@@ -25,7 +25,12 @@ import {
   heroQuotes, 
   activeQuest 
 } from "../data/heroData";
-import { skills } from "../data/skillsData";
+import { 
+  skills, 
+  GOOGLE_SHEETS_SKILLS_URL, 
+  GOOGLE_SHEETS_SKILLS_TAB 
+} from "../data/skillsData";
+import { fetchSkillsFromGoogleSheet } from "../utils/googleDrive";
 import { caseStudies } from "../data/projectsData";
 
 const statIconMap = {
@@ -37,12 +42,28 @@ const statIconMap = {
 };
 
 export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
+  const [skillsList, setSkillsList] = useState(skills);
   const [activeSkill, setActiveSkill] = useState(null);
   const [sweepActive, setSweepActive] = useState(false);
   const [revealedSkillIds, setRevealedSkillIds] = useState([]);
   const [radius, setRadius] = useState(215);
   const skillSectionRef = useRef(null);
   const hasTriggeredRef = useRef(false);
+
+  // Load skills dynamically from Google Sheet
+  useEffect(() => {
+    if (GOOGLE_SHEETS_SKILLS_URL) {
+      fetchSkillsFromGoogleSheet(GOOGLE_SHEETS_SKILLS_URL, GOOGLE_SHEETS_SKILLS_TAB)
+        .then((fetched) => {
+          if (fetched && fetched.length > 0) {
+            setSkillsList(fetched);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not load Google Sheet skills:", err);
+        });
+    }
+  }, []);
 
   // Name Carousel: RPG alias switching with matching initials (JK, RI, KY)
   const [nameIndex, setNameIndex] = useState(0);
@@ -79,11 +100,12 @@ export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
 
   // Trigger skills coming in anticlockwise one after another in a circle
   const triggerAnticlockwiseAwakening = () => {
+    if (skillsList.length === 0) return;
     setSweepActive(true);
     setRevealedSkillIds([]);
     
     // Reveal nodes one by one in anticlockwise order
-    skills.forEach((skill, index) => {
+    skillsList.forEach((skill, index) => {
       setTimeout(() => {
         setRevealedSkillIds((prev) => (prev.includes(skill.id) ? prev : [...prev, skill.id]));
       }, 140 + index * 180);
@@ -91,7 +113,7 @@ export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
 
     setTimeout(() => {
       setSweepActive(false);
-    }, skills.length * 180 + 450);
+    }, skillsList.length * 180 + 450);
   };
 
   // Scroll down trigger via IntersectionObserver
@@ -111,7 +133,14 @@ export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [skillsList]);
+
+  // Re-awaken when dynamic skills load if section is already visible
+  useEffect(() => {
+    if (hasTriggeredRef.current && skillsList.length > 0) {
+      triggerAnticlockwiseAwakening();
+    }
+  }, [skillsList]);
 
   return (
     <section id="home" className="relative pt-32 pb-24 sm:pt-40 sm:pb-32 overflow-hidden">
@@ -431,21 +460,21 @@ export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
 
               {/* Master Level & Perk Count */}
               <span className="text-[11px] font-mono font-medium text-[#5e5953] dark:text-[#a9a5b8]">
-                {activeSkill ? `${activeSkill.level} • ${activeSkill.rating}` : `Lv. MAX • ${skills.length} Masteries`}
+                {activeSkill ? `${activeSkill.level} • ${activeSkill.rating}` : skillsList.length > 0 ? `Lv. MAX • ${skillsList.length} Masteries` : "Connected to Google Sheet"}
               </span>
 
               {/* RPG Status Ribbon */}
               <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#b18a79]/15 dark:bg-[#e5c07b]/20 text-[10px] font-mono text-[#b18a79] dark:text-[#e5c07b] font-semibold border border-[#b18a79]/30 dark:border-[#e5c07b]/30 shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                <span>{activeSkill ? "PERK AWAKENED" : "ALL SKILLS UNLOCKED"}</span>
+                <span>{activeSkill ? "PERK AWAKENED" : skillsList.length > 0 ? "ALL SKILLS UNLOCKED" : "AWAITING INSCRIPTION"}</span>
               </div>
             </div>
 
             {/* ========================================================== */}
             {/* The Circular Skill Nodes Positioned Symmetrically in Heptagon */}
             {/* ========================================================== */}
-            {skills.map((skill, index) => {
-              const skillAngle = skill.angle !== undefined ? skill.angle : (-90 - index * (360 / Math.max(1, skills.length)));
+            {skillsList.map((skill, index) => {
+              const skillAngle = skill.angle !== undefined ? skill.angle : (-90 - index * (360 / Math.max(1, skillsList.length)));
               const rad = (skillAngle * Math.PI) / 180;
               const x = Math.round(Math.cos(rad) * radius);
               const y = Math.round(Math.sin(rad) * radius);

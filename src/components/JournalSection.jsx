@@ -498,31 +498,40 @@ export function JournalSection() {
 
           {/* 3D Coverflow Cards Stage */}
           <div className="coverflow-stage flex items-center justify-center h-[420px] sm:h-[470px] lg:h-[510px]">
-            {filteredEssays.map((essay, idx) => {
-              const cardTransform = getCardTransform(idx, filteredEssays.length);
-              const isActive = idx === activeIndex;
-              const essayLyrics = parseLyrics(essay.lyrics, essay.excerpt || essay.title);
-              const visible4 = getVisible4Lines(isActive ? lyricIndex : 0, essayLyrics);
-              const cardCover = normalizeGoogleDriveImageUrl(essay.coverImage);
+            {filteredEssays.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center max-w-md mx-auto rounded-3xl border border-dashed border-[#dbd2c4] dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md shadow-xl">
+                <BookOpen className="w-10 h-10 text-amber-500 mb-3 opacity-60 animate-pulse" />
+                <h4 className="font-serif text-lg font-medium text-[#202020] dark:text-[#f3f2f7]">Stories & Chronicles</h4>
+                <p className="text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8] mt-1.5 leading-relaxed">
+                  Connected to Google Sheet · Loading your literary archive...
+                </p>
+              </div>
+            ) : (
+              filteredEssays.map((essay, idx) => {
+                const cardTransform = getCardTransform(idx, filteredEssays.length);
+                const isActive = idx === activeIndex;
+                const essayLyrics = parseLyrics(essay.lyrics, essay.excerpt || essay.title);
+                const visible4 = getVisible4Lines(isActive ? lyricIndex : 0, essayLyrics);
+                const cardCover = normalizeGoogleDriveImageUrl(essay.coverImage);
 
-              return (
-                <div
-                  key={essay.id}
-                  onClick={() => handleBoxClick(idx)}
-                  className={`coverflow-card absolute w-[260px] sm:w-[310px] lg:w-[350px] h-[390px] sm:h-[445px] lg:h-[485px] rounded-[30px] sm:rounded-[34px] overflow-hidden border border-white/25 dark:border-white/15 cursor-pointer group select-none shadow-2xl transition-all ${
-                    isActive ? "ring-2 ring-white/30 dark:ring-white/20" : ""
-                  }`}
-                  style={{
-                    ...cardTransform,
-                    WebkitMaskImage: "-webkit-radial-gradient(white, black)",
-                    maskImage: "radial-gradient(white, black)"
-                  }}
-                  title={isActive ? "Click card to open Paginated Book Reader" : `Select ${essay.title}`}
-                >
-                  {/* Background Artwork Image */}
-                  <img
-                    src={cardCover}
-                    alt={essay.title}
+                return (
+                  <div
+                    key={essay.id}
+                    onClick={() => handleBoxClick(idx)}
+                    className={`coverflow-card absolute w-[260px] sm:w-[310px] lg:w-[350px] h-[390px] sm:h-[445px] lg:h-[485px] rounded-[30px] sm:rounded-[34px] overflow-hidden border border-white/25 dark:border-white/15 cursor-pointer group select-none shadow-2xl transition-all ${
+                      isActive ? "ring-2 ring-white/30 dark:ring-white/20" : ""
+                    }`}
+                    style={{
+                      ...cardTransform,
+                      WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+                      maskImage: "radial-gradient(white, black)"
+                    }}
+                    title={isActive ? "Click card to open Paginated Book Reader" : `Select ${essay.title}`}
+                  >
+                    {/* Background Artwork Image */}
+                    <img
+                      src={cardCover}
+                      alt={essay.title}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
                     loading="lazy"
                   />
@@ -610,7 +619,7 @@ export function JournalSection() {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
 
           {/* Track Dots Indicator */}

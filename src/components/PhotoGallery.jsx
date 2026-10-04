@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   MapPin, 
   Calendar, 
@@ -16,7 +16,16 @@ import {
   X,
   Camera
 } from "lucide-react";
-import { photoSeries, photoAlbums } from "../data/photosData";
+import { 
+  photoSeries, 
+  photoAlbums,
+  GOOGLE_SHEETS_PHOTOS_URL,
+  GOOGLE_SHEETS_PHOTOS_TAB
+} from "../data/photosData";
+import { 
+  fetchPhotosFromGoogleSheet, 
+  deriveAlbumsFromPhotos 
+} from "../utils/googleDrive";
 
 // Elegant Themed Photo Pinwheel Icon SVG (Harmonized with Portfolio Palette)
 function ThemedPhotosIcon({ className = "w-5 h-5" }) {
@@ -192,12 +201,36 @@ function PaginationBar({ currentPage, totalPages, totalItems, itemsPerPage, onPa
   );
 }
 
-export function PhotoGallery({ onSelectPhoto }) {
+export function PhotoGallery({ onSelectPhoto, onPhotosLoaded }) {
+  const [photosList, setPhotosList] = useState(photoSeries);
   const [viewMode, setViewMode] = useState("albums"); // "albums" | "all"
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [favorites, setFavorites] = useState({});
+
+  // Fetch photos from Google Sheet on mount
+  useEffect(() => {
+    if (GOOGLE_SHEETS_PHOTOS_URL) {
+      fetchPhotosFromGoogleSheet(GOOGLE_SHEETS_PHOTOS_URL, GOOGLE_SHEETS_PHOTOS_TAB)
+        .then((fetched) => {
+          if (fetched && fetched.length > 0) {
+            setPhotosList(fetched);
+            if (onPhotosLoaded) {
+              onPhotosLoaded(fetched);
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not load Google Sheet photos:", err);
+        });
+    }
+  }, [onPhotosLoaded]);
+
+  // Derive albums dynamically from loaded photos
+  const derivedAlbums = useMemo(() => {
+    return deriveAlbumsFromPhotos(photosList);
+  }, [photosList]);
 
   // 4 items per page for BOTH albums and photos
   const [albumsPage, setAlbumsPage] = useState(1);
@@ -221,7 +254,7 @@ export function PhotoGallery({ onSelectPhoto }) {
 
   // Filtered albums based on search & category
   const filteredAlbums = useMemo(() => {
-    return photoAlbums.filter((album) => {
+    return derivedAlbums.filter((album) => {
       const matchesCategory = selectedCategory === "All" || album.category.toLowerCase().includes(selectedCategory.toLowerCase());
       const matchesSearch = searchQuery.trim() === "" || 
         album.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -229,7 +262,7 @@ export function PhotoGallery({ onSelectPhoto }) {
         album.category.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [derivedAlbums, selectedCategory, searchQuery]);
 
   // Paginated albums: exactly 4 per page
   const totalAlbumPages = Math.ceil(filteredAlbums.length / albumsPerPage) || 1;
@@ -237,7 +270,7 @@ export function PhotoGallery({ onSelectPhoto }) {
 
   // Filtered photos based on album selection, category, and search query
   const filteredPhotos = useMemo(() => {
-    return photoSeries.filter((photo) => {
+    return photosList.filter((photo) => {
       const matchesAlbum = !selectedAlbum || photo.album === selectedAlbum.title;
       const matchesCategory = selectedCategory === "All" || photo.category.toLowerCase().includes(selectedCategory.toLowerCase());
       const matchesSearch = searchQuery.trim() === "" ||
@@ -247,24 +280,25 @@ export function PhotoGallery({ onSelectPhoto }) {
         (photo.tags && photo.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())));
       return matchesAlbum && matchesCategory && matchesSearch;
     });
-  }, [selectedAlbum, selectedCategory, searchQuery]);
+  }, [photosList, selectedAlbum, selectedCategory, searchQuery]);
 
   // Paginated photos: exactly 4 per page
   const totalPhotoPages = Math.ceil(filteredPhotos.length / photosPerPage) || 1;
   const currentPhotos = filteredPhotos.slice((photosPage - 1) * photosPerPage, photosPage * photosPerPage);
 
-  // Categories list with count helper
-  const categoriesList = [
-    { label: "All", count: photoSeries.length },
-    { label: "Birds", count: photoSeries.filter(p => p.category === "Birds").length },
-    { label: "Flowers", count: photoSeries.filter(p => p.category === "Flowers").length },
-    { label: "Animals", count: photoSeries.filter(p => p.category === "Animals").length },
-    { label: "Scenery", count: photoSeries.filter(p => p.category === "Scenery").length },
-    { label: "Monochrome", count: photoSeries.filter(p => p.category === "Monochrome").length },
-    { label: "Astrophotography", count: photoSeries.filter(p => p.category === "Astrophotography").length },
-    { label: "Urban", count: photoSeries.filter(p => p.category === "Urban").length },
-    { label: "Coastal", count: photoSeries.filter(p => p.category === "Coastal").length }
-  ];
+  // Dynamic categories list with count helper
+  const categoriesList = useMemo(() => {
+    const list = [{ label: "All", count: photosList.length }];
+    const counts = {};
+    photosList.forEach((p) => {
+      const cat = p.category || "Scenery";
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    Object.keys(counts).forEach((cat) => {
+      list.push({ label: cat, count: counts[cat] });
+    });
+    return list;
+  }, [photosList]);
 
   const handleSelectAlbum = (album) => {
     setSelectedAlbum(album);
@@ -330,7 +364,7 @@ export function PhotoGallery({ onSelectPhoto }) {
                 }`}
               >
                 <Folder className="w-3.5 h-3.5" />
-                <span>Albums ({photoAlbums.length})</span>
+                <span>Albums ({derivedAlbums.length})</span>
               </button>
 
               <button
@@ -346,7 +380,7 @@ export function PhotoGallery({ onSelectPhoto }) {
                 }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>All Photos ({photoSeries.length})</span>
+                <span>All Photos ({photosList.length})</span>
               </button>
             </div>
           </div>
@@ -412,172 +446,205 @@ export function PhotoGallery({ onSelectPhoto }) {
         {/* Scroll anchor for smooth page transitions */}
         <div id="photo-grid-anchor" className="scroll-mt-28" />
 
-        {/* Back Button & Breadcrumb when viewing an opened album */}
-        {selectedAlbum && (
-          <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#dbd2c4] dark:border-white/10">
-            <button
-              onClick={handleBackToAlbums}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-xs font-mono font-medium transition-colors cursor-pointer text-[#202020] dark:text-white"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to All Albums</span>
-            </button>
-
-            <div className="flex items-center gap-2 text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
-              <span className="font-semibold text-[#202020] dark:text-white">
-                {selectedAlbum.title}
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-[#b18a79] dark:text-[#e5c07b]" />
-                {selectedAlbum.location}
-              </span>
-              <span>•</span>
-              <span>({filteredPhotos.length} photos)</span>
+        {/* Empty State when no photos exist in Google Sheet */}
+        {photosList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center max-w-lg mx-auto rounded-3xl border border-dashed border-[#dbd2c4] dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md shadow-xl my-10">
+            <div className="w-16 h-16 rounded-full bg-[#b18a79]/15 dark:bg-[#e5c07b]/15 text-[#b18a79] dark:text-[#e5c07b] flex items-center justify-center mb-4">
+              <Camera className="w-8 h-8 opacity-80 animate-pulse" />
             </div>
+            <h3 className="font-serif text-xl font-medium text-[#202020] dark:text-[#f3f2f7]">
+              Field Visuals Awaiting Synchronisation
+            </h3>
+            <p className="text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8] mt-2 leading-relaxed">
+              Connected to Google Sheet · Add image rows to the <strong>Photos</strong> tab in your Google Sheet to populate albums and field photographs.
+            </p>
           </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* 1. ALBUMS: EXACTLY 4 ALBUMS PER PAGE                           */}
-        {/* ============================================================== */}
-        {viewMode === "albums" && !selectedAlbum && (
-          <div>
-            {/* 4 Albums in 2x2 Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-7 sm:gap-8 mb-8">
-              {currentAlbums.map((album) => (
-                <div
-                  key={album.id}
-                  onClick={() => handleSelectAlbum(album)}
-                  className="group relative cursor-pointer rounded-3xl p-3 sm:p-4 bg-white/40 dark:bg-[#181a24]/60 border border-[#dbd2c4] dark:border-white/10 shadow-sm hover:shadow-2xl transition-all duration-300 hover:-translate-y-1.5"
+        ) : (
+          <>
+            {/* Back Button & Breadcrumb when viewing an opened album */}
+            {selectedAlbum && (
+              <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#dbd2c4] dark:border-white/10">
+                <button
+                  onClick={handleBackToAlbums}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-xs font-mono font-medium transition-colors cursor-pointer text-[#202020] dark:text-white"
                 >
-                  {/* 3-Photo Signature Collage Cover */}
-                  <AlbumCollageCover album={album} />
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to All Albums</span>
+                </button>
 
-                  {/* Album Details Bar */}
-                  <div className="pt-4 px-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-serif text-lg sm:text-xl font-medium text-[#202020] dark:text-white group-hover:text-[#b18a79] dark:group-hover:text-[#e5c07b] transition-colors">
-                        {album.title}
-                      </h3>
-                      
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#b18a79]/10 dark:bg-[#e5c07b]/15 text-[#b18a79] dark:text-[#e5c07b] border border-[#b18a79]/30 dark:border-[#e5c07b]/30">
-                        {album.category}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-[#5e5953] dark:text-[#a9a5b8] font-sans pt-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-[#b18a79] dark:text-[#e5c07b] shrink-0" />
-                        <span className="truncate">{album.location}</span>
-                      </div>
-
-                      <span className="font-mono text-[11px] text-[#8f8880] dark:text-[#736f82]">
-                        {album.dateRange}
-                      </span>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2 text-xs font-mono text-[#5e5953] dark:text-[#a9a5b8]">
+                  <span className="font-semibold text-[#202020] dark:text-white">
+                    {selectedAlbum.title}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-[#b18a79] dark:text-[#e5c07b]" />
+                    {selectedAlbum.location}
+                  </span>
+                  <span>•</span>
+                  <span>({filteredPhotos.length} photos)</span>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
 
-            {/* Albums Multi-Page Selection (4 albums per page) */}
-            <PaginationBar
-              currentPage={albumsPage}
-              totalPages={totalAlbumPages}
-              totalItems={filteredAlbums.length}
-              itemsPerPage={albumsPerPage}
-              onPageChange={handleAlbumsPageChange}
-              label="albums"
-            />
-          </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* 2. PHOTOS: EXACTLY 4 PHOTOS PER PAGE                           */}
-        {/* ============================================================== */}
-        {(selectedAlbum || viewMode === "all") && (
-          <div>
-            {/* 4 Photos in 2x2 Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-7 mb-8">
-              {currentPhotos.map((photo, index) => {
-                const isFav = !!favorites[photo.id];
-                // Global index in photoSeries for Lightbox
-                const globalIndex = photoSeries.findIndex(p => p.id === photo.id);
-
-                return (
-                  <div
-                    key={photo.id}
-                    onClick={() => onSelectPhoto(photo, globalIndex >= 0 ? globalIndex : index)}
-                    className="group relative rounded-3xl overflow-hidden cursor-pointer shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-1.5 border border-[#dbd2c4] dark:border-white/10 bg-[#151720] aspect-[16/11] sm:aspect-[4/3]"
-                  >
-                    <img
-                      src={photo.imageUrl || photo.thumbnailUrl}
-                      alt={photo.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                    />
-
-                    {/* Gradient Scrim */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/30 opacity-75 group-hover:opacity-90 transition-opacity pointer-events-none" />
-
-                    {/* Top Left: Album Name Chip */}
-                    <div className="absolute top-3.5 left-3.5 z-10 pointer-events-none">
-                      <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] text-white/90 font-mono border border-white/15">
-                        {photo.album}
-                      </span>
-                    </div>
-
-                    {/* Top Right: Favorite & Info Buttons */}
-                    <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5">
-                      <button
-                        onClick={(e) => toggleFavorite(e, photo.id)}
-                        className={`p-2 rounded-full backdrop-blur-md transition-all cursor-pointer ${
-                          isFav
-                            ? "bg-rose-500 text-white shadow-md scale-105"
-                            : "bg-black/40 hover:bg-black/60 text-white/80 border border-white/15 opacity-0 group-hover:opacity-100"
-                        }`}
-                        title="Favorite"
-                      >
-                        <Heart className="w-3.5 h-3.5 fill-current" />
-                      </button>
-
-                      <span className="p-2 rounded-full bg-black/40 text-white/80 border border-white/15 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Info className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-
-                    {/* Bottom Bar: Location & Date */}
-                    <div className="absolute bottom-3.5 inset-x-3.5 p-3.5 rounded-2xl bg-black/70 backdrop-blur-md border border-white/15 text-white pointer-events-none space-y-1">
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#e5c07b] font-sans">
-                        <MapPin className="w-3.5 h-3.5 shrink-0 text-[#e5c07b]" />
-                        <span className="truncate">{photo.location}</span>
-                      </div>
-
-                      <h3 className="font-serif text-lg font-medium tracking-wide text-white leading-snug truncate">
-                        {photo.title}
-                      </h3>
-
-                      <div className="flex items-center justify-between text-[11px] font-mono text-white/60 pt-0.5">
-                        <span>{photo.cityRegion}</span>
-                        <span>{photo.capturedDate.split("·")[0]}</span>
-                      </div>
-                    </div>
+            {/* ============================================================== */}
+            {/* 1. ALBUMS: EXACTLY 4 ALBUMS PER PAGE                           */}
+            {/* ============================================================== */}
+            {viewMode === "albums" && !selectedAlbum && (
+              <div>
+                {filteredAlbums.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-mono text-[#8f8880] dark:text-[#a9a5b8]">
+                    No albums found matching your search.
                   </div>
-                );
-              })}
-            </div>
+                ) : (
+                  <>
+                    {/* 4 Albums in 2x2 Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-7 sm:gap-8 mb-8">
+                      {currentAlbums.map((album) => (
+                        <div
+                          key={album.id}
+                          onClick={() => handleSelectAlbum(album)}
+                          className="group relative cursor-pointer rounded-3xl p-3 sm:p-4 bg-white/40 dark:bg-[#181a24]/60 border border-[#dbd2c4] dark:border-white/10 shadow-sm hover:shadow-2xl transition-all duration-300 hover:-translate-y-1.5"
+                        >
+                          {/* 3-Photo Signature Collage Cover */}
+                          <AlbumCollageCover album={album} />
 
-            {/* Photos Multi-Page Selection (4 photos per page) */}
-            <PaginationBar
-              currentPage={photosPage}
-              totalPages={totalPhotoPages}
-              totalItems={filteredPhotos.length}
-              itemsPerPage={photosPerPage}
-              onPageChange={handlePhotosPageChange}
-              label="photos"
-            />
-          </div>
+                          {/* Album Details Bar */}
+                          <div className="pt-4 px-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-serif text-lg sm:text-xl font-medium text-[#202020] dark:text-white group-hover:text-[#b18a79] dark:group-hover:text-[#e5c07b] transition-colors">
+                                {album.title}
+                              </h3>
+                              
+                              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#b18a79]/10 dark:bg-[#e5c07b]/15 text-[#b18a79] dark:text-[#e5c07b] border border-[#b18a79]/30 dark:border-[#e5c07b]/30">
+                                {album.category}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs text-[#5e5953] dark:text-[#a9a5b8] font-sans pt-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-[#b18a79] dark:text-[#e5c07b] shrink-0" />
+                                <span className="truncate">{album.location}</span>
+                              </div>
+
+                              <span className="font-mono text-[11px] text-[#8f8880] dark:text-[#736f82]">
+                                {album.dateRange || album.year}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Albums Multi-Page Selection (4 albums per page) */}
+                    <PaginationBar
+                      currentPage={albumsPage}
+                      totalPages={totalAlbumPages}
+                      totalItems={filteredAlbums.length}
+                      itemsPerPage={albumsPerPage}
+                      onPageChange={handleAlbumsPageChange}
+                      label="albums"
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* 2. PHOTOS: EXACTLY 4 PHOTOS PER PAGE                           */}
+            {/* ============================================================== */}
+            {(selectedAlbum || viewMode === "all") && (
+              <div>
+                {filteredPhotos.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-mono text-[#8f8880] dark:text-[#a9a5b8]">
+                    No photographs found matching your filter.
+                  </div>
+                ) : (
+                  <>
+                    {/* 4 Photos in 2x2 Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-7 mb-8">
+                      {currentPhotos.map((photo, index) => {
+                        const isFav = !!favorites[photo.id];
+                        // Global index in photosList for Lightbox
+                        const globalIndex = photosList.findIndex(p => p.id === photo.id);
+
+                        return (
+                          <div
+                            key={photo.id}
+                            onClick={() => onSelectPhoto(photo, globalIndex >= 0 ? globalIndex : index, photosList)}
+                            className="group relative rounded-3xl overflow-hidden cursor-pointer shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-1.5 border border-[#dbd2c4] dark:border-white/10 bg-[#151720] aspect-[16/11] sm:aspect-[4/3]"
+                          >
+                            <img
+                              src={photo.imageUrl || photo.thumbnailUrl}
+                              alt={photo.title}
+                              loading="lazy"
+                              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                            />
+
+                            {/* Gradient Scrim */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/30 opacity-75 group-hover:opacity-90 transition-opacity pointer-events-none" />
+
+                            {/* Top Left: Album Name Chip */}
+                            <div className="absolute top-3.5 left-3.5 z-10 pointer-events-none">
+                              <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] text-white/90 font-mono border border-white/15">
+                                {photo.album}
+                              </span>
+                            </div>
+
+                            {/* Top Right: Favorite & Info Buttons */}
+                            <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5">
+                              <button
+                                onClick={(e) => toggleFavorite(e, photo.id)}
+                                className={`p-2 rounded-full backdrop-blur-md transition-all cursor-pointer ${
+                                  isFav
+                                    ? "bg-rose-500 text-white shadow-md scale-105"
+                                    : "bg-black/40 hover:bg-black/60 text-white/80 border border-white/15 opacity-0 group-hover:opacity-100"
+                                }`}
+                                title="Favorite"
+                              >
+                                <Heart className="w-3.5 h-3.5 fill-current" />
+                              </button>
+
+                              <span className="p-2 rounded-full bg-black/40 text-white/80 border border-white/15 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Info className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+
+                            {/* Bottom Bar: Location & Date */}
+                            <div className="absolute bottom-3.5 inset-x-3.5 p-3.5 rounded-2xl bg-black/70 backdrop-blur-md border border-white/15 text-white pointer-events-none space-y-1">
+                              <div className="flex items-center gap-1.5 text-[11px] text-[#e5c07b] font-sans">
+                                <MapPin className="w-3.5 h-3.5 shrink-0 text-[#e5c07b]" />
+                                <span className="truncate">{photo.location}</span>
+                              </div>
+
+                              <h3 className="font-serif text-lg font-medium tracking-wide text-white leading-snug truncate">
+                                {photo.title}
+                              </h3>
+
+                              <div className="flex items-center justify-between text-[11px] font-mono text-white/60 pt-0.5">
+                                <span>{photo.cityRegion}</span>
+                                <span>{photo.capturedDate.split("·")[0]}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Photos Multi-Page Selection (4 photos per page) */}
+                    <PaginationBar
+                      currentPage={photosPage}
+                      totalPages={totalPhotoPages}
+                      totalItems={filteredPhotos.length}
+                      itemsPerPage={photosPerPage}
+                      onPageChange={handlePhotosPageChange}
+                      label="photos"
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {/* Footer Note */}
@@ -591,7 +658,7 @@ export function PhotoGallery({ onSelectPhoto }) {
             </span>
           </div>
           <span className="font-mono text-[11px] text-[#8f8880] dark:text-[#736f82]">
-            {photoSeries.length} Geotagged Photographs · {photoAlbums.length} Album Series
+            {photosList.length} Geotagged Photographs · {derivedAlbums.length} Album Series
           </span>
         </div>
 
