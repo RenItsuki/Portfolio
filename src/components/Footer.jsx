@@ -31,7 +31,12 @@ export function Footer() {
     <footer className="border-t border-[#dbd2c4] dark:border-[#38374d] py-12 bg-[#eae5d9]/30 dark:bg-[#151720]/40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex flex-col sm:flex-row items-center gap-4 text-xs text-[#5e5953] dark:text-[#a9a5b8]">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/logo.png"
+              alt="Joy Karmakar Logo"
+              className="w-6 h-6 rounded-lg object-cover border border-[#b18a79]/40 dark:border-[#e5c07b]/40 shadow-sm"
+            />
             <span className="font-serif font-semibold text-[#202020] dark:text-[#f3f2f7]">Joy Karmakar</span>
             <span>© {new Date().getFullYear()}</span>
           </div>

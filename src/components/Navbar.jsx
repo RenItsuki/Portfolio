@@ -88,8 +88,12 @@ export function Navbar({ theme, onToggleTheme }) {
             onClick={() => scrollToSection("home")}
             className="flex items-center gap-3 group cursor-pointer text-left"
           >
-            <div className="w-9 h-9 rounded-2xl bg-[#b18a79] dark:bg-[#e5c07b] text-white dark:text-black flex items-center justify-center font-serif text-base font-bold shadow-md group-hover:scale-105 transition-transform duration-300">
-              JK
+            <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden p-0.5 bg-gradient-to-tr from-[#b18a79] to-[#dfb29d] dark:from-[#e5c07b] dark:to-[#d97706] shadow-md group-hover:scale-105 transition-transform duration-300 shrink-0">
+              <img
+                src="/logo.png"
+                alt="Joy Karmakar Logo"
+                className="w-full h-full object-cover rounded-[14px]"
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-serif text-base font-medium tracking-wide text-[#202020] dark:text-[#f3f2f7] group-hover:text-[#b18a79] dark:group-hover:text-[#e5c07b] transition-colors">

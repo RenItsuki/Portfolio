@@ -235,21 +235,16 @@ export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
                 <div className="absolute inset-2 rounded-full border border-dashed border-[#b18a79]/60 dark:border-[#e5c07b]/50 rpg-spin-slow" />
                 
                 {/* Center Stylized Knight / Architect Avatar */}
-                <div className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#b18a79] to-[#dfb29d] dark:from-[#4b396f] dark:to-[#e5c07b] p-0.5 shadow-xl flex items-center justify-center">
-                  <div className="w-full h-full rounded-[14px] bg-[#fdfcf9] dark:bg-[#0d101d] flex flex-col items-center justify-center text-[#202020] dark:text-[#f3f2f7]">
-                    <span 
-                      key={`initials-${nameIndex}`}
-                      className="font-serif text-xl font-bold"
-                      style={{
-                        display: "inline-block",
-                        animation: nameAnimating
-                          ? "dissolveOut 0.38s cubic-bezier(0.4, 0, 0.2, 1) forwards"
-                          : "dissolveIn 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards"
-                      }}
-                    >
-                      {heroProfiles[nameIndex]?.initials || "JK"}
-                    </span>
-                    <span className="text-[8px] font-mono uppercase text-[#b18a79] dark:text-[#e5c07b]">{characterLevel.tag || "Lv.99"}</span>
+                <div className="relative z-10 w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#b18a79] to-[#dfb29d] dark:from-[#e5c07b] dark:to-[#d97706] p-0.5 shadow-xl flex items-center justify-center overflow-hidden group">
+                  <div className="w-full h-full rounded-[14px] overflow-hidden relative bg-[#fdfcf9] dark:bg-[#0d101d]">
+                    <img
+                      src="/logo.png"
+                      alt="Joy Karmakar Character Logo"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 py-0.5 bg-black/65 backdrop-blur-xs flex items-center justify-center">
+                      <span className="text-[9px] font-mono font-bold uppercase text-amber-300 dark:text-[#e5c07b] tracking-wider">{characterLevel.tag || "Lv.99"}</span>
+                    </div>
                   </div>
                 </div>
               </div>
