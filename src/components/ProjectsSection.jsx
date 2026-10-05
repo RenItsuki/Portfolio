@@ -741,8 +741,8 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#fdfcf9] dark:bg-[#12141e] border-2 border-[#b18a79] dark:border-[#e5c07b]/80 shadow-[0_0_90px_rgba(229,192,123,0.45)] p-6 sm:p-8 text-[#202020] dark:text-[#f3f2f7] rpg-quest-unfurl text-left overflow-hidden"
           >
-            {/* Golden Gleam Light Sweep */}
-            <div className="rpg-gleam-effect" />
+            {/* Golden Gleam Light Sweep (Plays Once upon opening) */}
+            <div key={activeProject.id || activeProject.slug || activeProject.title} className="rpg-gleam-effect" />
 
             {/* Top RPG Decorative Banner */}
             <div className="flex items-center justify-between pb-3 border-b border-[#dbd2c4]/70 dark:border-white/10 mb-4">

@@ -884,8 +884,8 @@ body {
     left: -100%;
     opacity: 0;
   }
-  30% {
-    opacity: 0.8;
+  25% {
+    opacity: 0.75;
   }
   100% {
     left: 200%;
@@ -898,9 +898,9 @@ body {
   top: 0;
   bottom: 0;
   width: 60%;
-  background: linear-gradient(90deg, transparent, rgba(229, 192, 123, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgba(229, 192, 123, 0.38), transparent);
   transform: skewX(-25deg);
-  animation: rpgGoldenGleam 3s ease-in-out infinite;
+  animation: rpgGoldenGleam 2.2s cubic-bezier(0.25, 1, 0.5, 1) 1 forwards;
   pointer-events: none;
 }
 
