@@ -475,8 +475,12 @@ export async function fetchProjectsFromGoogleSheet(sheetUrlOrId, tabName = "Proj
     const isProjectSheet = 
       headers["role"] !== undefined || 
       headers["summary"] !== undefined || 
+      headers["overview"] !== undefined || 
+      headers["techstack"] !== undefined || 
+      headers["keyfeatures"] !== undefined || 
       headers["posterimage"] !== undefined || 
       headers["demourl"] !== undefined || 
+      headers["repourl"] !== undefined || 
       headers["githuburl"] !== undefined || 
       headers["tags"] !== undefined ||
       headers["impact"] !== undefined;
@@ -504,20 +508,20 @@ export async function fetchProjectsFromGoogleSheet(sheetUrlOrId, tabName = "Proj
       const title = getVal(row, "title", "name", "project", "heading");
       if (!title) continue;
 
-      const subtitle = getVal(row, "subtitle", "tagline", "pitch");
+      const subtitle = getVal(row, "tagline", "subtitle", "pitch");
       const category = getVal(row, "category", "sector", "field", "type") || "Edge AI & Computer Vision";
-      const year = getVal(row, "year", "date") || "2026";
+      const year = getVal(row, "duration", "year", "date", "timeline") || "2026";
       const role = getVal(row, "role", "position") || "Lead Architect";
-      const summary = getVal(row, "summary", "description", "body", "about");
-      const impact = getVal(row, "impact", "metric", "result", "outcome");
-      const rawTags = getVal(row, "tags", "tech", "technologies", "skills");
-      const tags = rawTags ? rawTags.split(/[,|;]+/).map((t) => t.trim()).filter(Boolean) : ["AI", "Web", "Design"];
+      const summary = getVal(row, "overview", "summary", "description", "body", "about", "details");
+      const impact = getVal(row, "impact", "metric", "result", "outcome", "challenge");
+      const rawTags = getVal(row, "techstack", "stack", "technologies", "tech", "tags", "skills", "tools");
+      const tags = rawTags ? rawTags.split(/[,|;]+/).map((t) => t.trim()).filter(Boolean) : [category];
       const rawImage = getVal(row, "posterimage", "image", "cover", "photo", "img", "thumbnail");
       const posterImage = normalizeGoogleDriveImageUrl(rawImage);
-      const videoPreviewUrl = getVal(row, "videopreviewurl", "videourl", "video");
-      const demoUrl = getVal(row, "demourl", "liveurl", "url", "link", "site");
-      const githubUrl = getVal(row, "githuburl", "repo", "github", "source");
-      const rawHighlights = getVal(row, "highlights", "keypoints", "features");
+      const videoPreviewUrl = getVal(row, "videourl", "videopreviewurl", "video", "walkthrough");
+      const demoUrl = getVal(row, "demourl", "liveurl", "url", "link", "site", "demo");
+      const githubUrl = getVal(row, "repourl", "githuburl", "repo", "github", "source", "code");
+      const rawHighlights = getVal(row, "keyfeatures", "features", "highlights", "keypoints", "feats", "chronicles");
       const highlights = rawHighlights ? rawHighlights.split(/[\n|;]+/).map((h) => h.trim().replace(/^[-•*]\s*/, "")).filter(Boolean) : [];
       const previewType = getVal(row, "previewtype", "simulator") || "iframe";
 
@@ -537,11 +541,7 @@ export async function fetchProjectsFromGoogleSheet(sheetUrlOrId, tabName = "Proj
         demoUrl: demoUrl ? demoUrl.trim() : "",
         githubUrl: githubUrl ? githubUrl.trim() : "",
         previewType,
-        highlights: highlights.length > 0 ? highlights : [
-          "High-performance architecture with modern reactive interface",
-          "Responsive cross-device design with fluid interactions",
-          "Optimized execution and graceful degradation"
-        ],
+        highlights: highlights.length > 0 ? highlights : (summary ? summary.split(/[.?!]\s+/).map((s) => s.trim()).filter((s) => s.length > 6).slice(0, 3) : [subtitle || category]),
         isFromGoogleSheet: true
       });
     }
