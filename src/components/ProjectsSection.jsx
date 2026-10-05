@@ -817,7 +817,8 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
 
                 {/* Adventure Action Triggers (Launch Sim, Video, Code Relic) */}
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {onOpenLivePreview && (
+                  {/* Live Interactive Sim Button - ONLY if demoUrl is filled in Google Sheet */}
+                  {onOpenLivePreview && Boolean(activeProject.demoUrl?.trim()) && (
                     <button
                       onClick={() => {
                         onOpenLivePreview(activeProject);
@@ -830,20 +831,26 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
                     </button>
                   )}
 
-                  {onOpenVideoDemo && activeProject.videoPreviewUrl && (
+                  {/* Video Walkthrough Demo Button - ONLY if video link is filled in Google Sheet */}
+                  {onOpenVideoDemo && Boolean((activeProject.videoPreviewUrl || activeProject.videoUrl)?.trim()) && (
                     <button
                       onClick={() => {
                         onOpenVideoDemo(activeProject);
                         setActiveProject(null);
                       }}
-                      className="py-2 px-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[#202020] dark:text-[#e5c07b] border border-[#dbd2c4] dark:border-white/15 text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:border-[#b18a79] dark:hover:border-[#e5c07b]"
+                      className={`${
+                        !activeProject.demoUrl?.trim()
+                          ? "flex-1 min-w-[140px] py-2.5 px-4 bg-gradient-to-r from-[#b18a79] via-[#9c7564] to-[#b18a79] dark:from-[#e5c07b] dark:via-[#d97706] dark:to-[#e5c07b] text-white dark:text-black font-bold shadow-[0_0_20px_rgba(229,192,123,0.35)] hover:scale-102"
+                          : "py-2 px-3 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[#202020] dark:text-[#e5c07b] border border-[#dbd2c4] dark:border-white/15 font-semibold hover:border-[#b18a79] dark:hover:border-[#e5c07b]"
+                      } rounded-xl text-xs font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95`}
                     >
-                      <Scroll className="w-3.5 h-3.5 text-[#b18a79] dark:text-[#e5c07b]" />
+                      <Scroll className={`w-3.5 h-3.5 ${!activeProject.demoUrl?.trim() ? "text-current" : "text-[#b18a79] dark:text-[#e5c07b]"}`} />
                       <span>Chronicle Video</span>
                     </button>
                   )}
 
-                  {(activeProject.githubUrl || activeProject.links?.github) && (
+                  {/* GitHub / Source Code Button - ONLY if githubUrl is filled in Google Sheet */}
+                  {Boolean((activeProject.githubUrl || activeProject.links?.github)?.trim()) && (
                     <a
                       href={activeProject.githubUrl || activeProject.links?.github}
                       target="_blank"

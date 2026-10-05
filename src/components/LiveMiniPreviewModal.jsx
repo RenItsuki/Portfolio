@@ -154,15 +154,17 @@ export function LiveMiniPreviewModal({ project, isOpen, onClose }) {
               </button>
             </div>
 
-            <a
-              href={project.demoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-[#4b396f] hover:bg-[#5a4584] border border-[#b6a2c9]/30 text-white transition-colors"
-            >
-              <span>Open live</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            {Boolean(project.demoUrl?.trim()) && (
+              <a
+                href={project.demoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-[#4b396f] hover:bg-[#5a4584] border border-[#b6a2c9]/30 text-white transition-colors"
+              >
+                <span>Open live</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
 
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}

@@ -74,6 +74,52 @@ export function normalizeGoogleDriveImageUrl(url) {
 }
 
 /**
+ * Resolves any video URL (YouTube, Vimeo, Google Drive video, direct MP4/WebM)
+ * into the appropriate playback descriptor (iframe embed or native video element)
+ */
+export function getVideoEmbedInfo(url) {
+  if (!url || typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  // 1. YouTube video
+  const ytMatch = 
+    trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    return {
+      type: "iframe",
+      embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}?autoplay=1&rel=0`
+    };
+  }
+
+  // 2. Vimeo video
+  const vimeoMatch = trimmed.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (vimeoMatch && vimeoMatch[1]) {
+    return {
+      type: "iframe",
+      embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`
+    };
+  }
+
+  // 3. Google Drive video preview
+  const driveMatch = 
+    trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i) ||
+    trimmed.match(/docs\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  if (driveMatch && driveMatch[1]) {
+    return {
+      type: "iframe",
+      embedUrl: `https://drive.google.com/file/d/${driveMatch[1]}/preview`
+    };
+  }
+
+  // 4. Direct video file or media stream
+  return {
+    type: "video",
+    src: trimmed
+  };
+}
+
+/**
  * Universally parses summary lyrics from:
  * - Alt + Enter line breaks (\r\n, \n, \r) from Google Sheets & Excel
  * - Pipe symbols (|)
@@ -486,10 +532,10 @@ export async function fetchProjectsFromGoogleSheet(sheetUrlOrId, tabName = "Proj
         impact: impact || `${year} Production Deployment`,
         tags,
         posterImage,
-        videoPreviewUrl: videoPreviewUrl || "",
+        videoPreviewUrl: videoPreviewUrl ? videoPreviewUrl.trim() : "",
         videoPlaceholder: posterImage,
-        demoUrl: demoUrl || githubUrl || "",
-        githubUrl: githubUrl || demoUrl || "",
+        demoUrl: demoUrl ? demoUrl.trim() : "",
+        githubUrl: githubUrl ? githubUrl.trim() : "",
         previewType,
         highlights: highlights.length > 0 ? highlights : [
           "High-performance architecture with modern reactive interface",
