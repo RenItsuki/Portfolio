@@ -560,8 +560,9 @@ export function StoryBookReaderModal({ article, isOpen, onClose }) {
                 <img
                   src={coverImageSrc}
                   alt={article.title}
-                  className="w-full h-full object-cover pointer-events-none"
                   draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="w-full h-full object-cover pointer-events-none select-none"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none" />
                 <div className="absolute bottom-4 left-5 right-5 text-white pointer-events-none">

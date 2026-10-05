@@ -32,6 +32,7 @@ import {
 } from "../data/skillsData";
 import { fetchSkillsFromGoogleSheet } from "../utils/googleDrive";
 import { caseStudies } from "../data/projectsData";
+import logoImg from "../assets/logo.png";
 
 const statIconMap = {
   Sparkles,
@@ -236,13 +237,15 @@ export function Hero({ onOpenLivePreview, onOpenVideoDemo }) {
                 
                 {/* Center Stylized Knight / Architect Avatar */}
                 <div className="relative z-10 w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#b18a79] to-[#dfb29d] dark:from-[#e5c07b] dark:to-[#d97706] p-0.5 shadow-xl flex items-center justify-center overflow-hidden group">
-                  <div className="w-full h-full rounded-[14px] overflow-hidden relative bg-[#fdfcf9] dark:bg-[#0d101d]">
+                  <div className="w-full h-full rounded-[14px] overflow-hidden relative bg-[#fdfcf9] dark:bg-[#0d101d] select-none">
                     <img
-                      src="/logo.png"
+                      src={logoImg}
+                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "./logo.png"; }}
                       alt="Joy Karmakar Character Logo"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      draggable={false}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none select-none"
                     />
-                    <div className="absolute inset-x-0 bottom-0 py-0.5 bg-black/65 backdrop-blur-xs flex items-center justify-center">
+                    <div className="absolute inset-x-0 bottom-0 py-0.5 bg-black/65 backdrop-blur-xs flex items-center justify-center select-none pointer-events-none">
                       <span className="text-[9px] font-mono font-bold uppercase text-amber-300 dark:text-[#e5c07b] tracking-wider">{characterLevel.tag || "Lv.99"}</span>
                     </div>
                   </div>

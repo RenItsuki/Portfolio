@@ -168,11 +168,21 @@ export function PhotoLightbox({ photos, currentIndex, isOpen, onClose, onNavigat
         <div className={`relative flex-1 h-full flex items-center justify-center transition-all duration-300 ${
           showInfoDrawer ? "md:pr-4" : ""
         }`}>
-          <img
-            src={currentPhoto.imageUrl}
-            alt={currentPhoto.title}
-            className="max-h-[75vh] sm:max-h-[82vh] max-w-full object-contain rounded-2xl shadow-2xl transition-all duration-300"
-          />
+          <div className="relative inline-flex items-center justify-center select-none">
+            <img
+              src={currentPhoto.imageUrl}
+              alt={currentPhoto.title}
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+              className="max-h-[75vh] sm:max-h-[82vh] max-w-full object-contain rounded-2xl shadow-2xl transition-all duration-300 pointer-events-none select-none"
+            />
+            {/* Transparent anti-download overlay shield */}
+            <div 
+              className="absolute inset-0 z-10 cursor-default select-none" 
+              onContextMenu={(e) => e.preventDefault()}
+              onDragStart={(e) => e.preventDefault()}
+            />
+          </div>
         </div>
 
         {/* Google Photos "Info (i)" Details Drawer (Location, Date, Album, Story, Tags - NO CAMERA SETTINGS) */}

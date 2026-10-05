@@ -504,9 +504,11 @@ export function JournalSection() {
                     <img
                       src={cardCover}
                       alt={essay.title}
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none"
-                    loading="lazy"
-                  />
+                      draggable={false}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none select-none"
+                      loading="lazy"
+                    />
 
                   {/* Dark Vignettes for Contrast (Top behind title & Bottom behind summary lyrics) */}
                   <div className="absolute top-0 inset-x-0 h-36 bg-gradient-to-b from-black/90 via-black/60 to-transparent pointer-events-none" />
@@ -651,7 +653,9 @@ export function JournalSection() {
                       <img
                         src={normalizeGoogleDriveImageUrl(essay.coverImage)}
                         alt=""
-                        className="w-8 h-8 rounded-lg object-cover shrink-0"
+                        draggable={false}
+                        onContextMenu={(e) => e.preventDefault()}
+                        className="w-8 h-8 rounded-lg object-cover shrink-0 pointer-events-none select-none"
                       />
                       <span className="truncate text-xs sm:text-sm font-serif">
                         {essay.title}
@@ -711,7 +715,9 @@ export function JournalSection() {
                 <img
                   src={normalizeGoogleDriveImageUrl(activeEssay?.coverImage)}
                   alt={activeEssay?.title}
-                  className="w-full h-full object-cover"
+                  draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="w-full h-full object-cover pointer-events-none select-none"
                 />
                 {isPlaying && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-0.5">

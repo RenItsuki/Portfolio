@@ -58,7 +58,9 @@ export function AboutSection() {
               <img
                 src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=1000&q=80"
                 alt="Studio space"
-                className="w-full aspect-[4/5] object-cover"
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                className="w-full aspect-[4/5] object-cover pointer-events-none select-none"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent flex flex-col justify-end p-7 text-white">
                 <span className="font-mono text-xs text-emerald-400">Creative Philosophy</span>

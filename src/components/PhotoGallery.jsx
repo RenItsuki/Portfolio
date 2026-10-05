@@ -57,7 +57,9 @@ function AlbumCollageCover({ album }) {
           <img
             src={photos[0]}
             alt={album.title}
-            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none select-none"
             loading="lazy"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
@@ -70,7 +72,9 @@ function AlbumCollageCover({ album }) {
             <img
               src={photos[1] || photos[0]}
               alt=""
-              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none select-none"
               loading="lazy"
             />
           </div>
@@ -80,7 +84,9 @@ function AlbumCollageCover({ album }) {
             <img
               src={photos[2] || photos[0]}
               alt=""
-              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none select-none"
               loading="lazy"
             />
           </div>
@@ -587,7 +593,9 @@ export function PhotoGallery({ onSelectPhoto, onPhotosLoaded }) {
                               src={photo.imageUrl || photo.thumbnailUrl}
                               alt={photo.title}
                               loading="lazy"
-                              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                              draggable={false}
+                              onContextMenu={(e) => e.preventDefault()}
+                              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 pointer-events-none select-none"
                             />
 
                             {/* Gradient Scrim */}

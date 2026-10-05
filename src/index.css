@@ -904,5 +904,24 @@ body {
   pointer-events: none;
 }
 
+/* ============================================================ */
+/* Strict Image Copy, Download & Drag Protection                */
+/* ============================================================ */
+img,
+picture,
+[data-protected-img="true"] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  -webkit-touch-callout: none;
+  pointer-events: none;
+}
+
 
 

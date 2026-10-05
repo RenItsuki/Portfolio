@@ -9,6 +9,7 @@ import {
 
 
 import { navWaypoints } from "../data/profileData";
+import logoImg from "../assets/logo.png";
 
 export function Navbar({ theme, onToggleTheme }) {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -90,9 +91,11 @@ export function Navbar({ theme, onToggleTheme }) {
           >
             <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-2xl overflow-hidden p-0.5 bg-gradient-to-tr from-[#b18a79] to-[#dfb29d] dark:from-[#e5c07b] dark:to-[#d97706] shadow-md group-hover:scale-105 transition-transform duration-300 shrink-0">
               <img
-                src="/logo.png"
+                src={logoImg}
+                onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "./logo.png"; }}
                 alt="Joy Karmakar Logo"
-                className="w-full h-full object-cover rounded-[14px]"
+                draggable={false}
+                className="w-full h-full object-cover rounded-[14px] pointer-events-none select-none"
               />
             </div>
             <div className="flex flex-col">

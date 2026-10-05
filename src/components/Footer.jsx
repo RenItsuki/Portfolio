@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Heart, ArrowUp, Compass } from "lucide-react";
 import { studioProfile as personalInfo } from "../data/profileData";
+import logoImg from "../assets/logo.png";
 
 export function Footer() {
   const [currentTime, setCurrentTime] = useState("");
@@ -33,9 +34,11 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row items-center gap-4 text-xs text-[#5e5953] dark:text-[#a9a5b8]">
           <div className="flex items-center gap-2.5">
             <img
-              src="/logo.png"
+              src={logoImg}
+              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "./logo.png"; }}
               alt="Joy Karmakar Logo"
-              className="w-6 h-6 rounded-lg object-cover border border-[#b18a79]/40 dark:border-[#e5c07b]/40 shadow-sm"
+              draggable={false}
+              className="w-6 h-6 rounded-lg object-cover border border-[#b18a79]/40 dark:border-[#e5c07b]/40 shadow-sm pointer-events-none select-none"
             />
             <span className="font-serif font-semibold text-[#202020] dark:text-[#f3f2f7]">Joy Karmakar</span>
             <span>© {new Date().getFullYear()}</span>

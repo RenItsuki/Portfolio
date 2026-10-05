@@ -51,6 +51,42 @@ export function App() {
     } catch (e) {}
   }, [theme]);
 
+  // Prevent copying, downloading, and dragging of images across the portfolio
+  useEffect(() => {
+    const isImageOrProtected = (target) => {
+      if (!target) return false;
+      if (target.tagName === "IMG" || target.tagName === "PICTURE") return true;
+      if (target.hasAttribute?.("data-protected-img")) return true;
+      if (target.closest?.("img, [data-protected-img='true'], [data-protected='true']")) return true;
+      if (target.querySelector?.("img")) return true;
+      return false;
+    };
+
+    const handleContextMenu = (e) => {
+      if (isImageOrProtected(e.target)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    const handleDragStart = (e) => {
+      if (isImageOrProtected(e.target)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    document.addEventListener("contextmenu", handleContextMenu, { capture: true });
+    document.addEventListener("dragstart", handleDragStart, { capture: true });
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu, { capture: true });
+      document.removeEventListener("dragstart", handleDragStart, { capture: true });
+    };
+  }, []);
+
   const toggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };

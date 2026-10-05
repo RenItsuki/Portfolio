@@ -704,7 +704,9 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
                         <img
                           src={project.posterImage}
                           alt={project.title}
-                          className="w-full h-full object-cover filter brightness-95 group-hover:brightness-110 group-hover:scale-115 transition-all duration-700 ease-out"
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
+                          className="w-full h-full object-cover filter brightness-95 group-hover:brightness-110 group-hover:scale-115 transition-all duration-700 ease-out pointer-events-none select-none"
                           loading="lazy"
                         />
                         {/* Radial Shadow Scrim */}
@@ -838,7 +840,9 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
                   <img
                     src={activeProject.posterImage}
                     alt={activeProject.title}
-                    className="w-full h-56 sm:h-64 object-cover group-hover:scale-105 transition-transform duration-500"
+                    draggable={false}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="w-full h-56 sm:h-64 object-cover group-hover:scale-105 transition-transform duration-500 pointer-events-none select-none"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-85 pointer-events-none" />
                   
