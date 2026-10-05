@@ -23,16 +23,17 @@ import {
  * Tailored 100% to Joy Karmakar's actual projects
  */
 export function InteractiveAppSandbox({ projectId }) {
-  if (projectId === "via-lux") {
+  const normId = (projectId || "").toLowerCase();
+  if (normId.includes("via-lux")) {
     return <ViaLuxSandbox />;
   }
-  if (projectId === "cinematic-donut-render") {
+  if (normId.includes("donut") || normId.includes("blender")) {
     return <BlenderDonutSandbox />;
   }
-  if (projectId === "havish-ml-attrition") {
+  if (normId.includes("attrition") || normId.includes("ml") || normId.includes("havish")) {
     return <AttritionMLSandbox />;
   }
-  if (projectId === "nukkad-ki-awaazein") {
+  if (normId.includes("nukkad") || normId.includes("theatre") || normId.includes("audio")) {
     return <TheatreAudioSandbox />;
   }
   return <WebWizardrySandbox />;

@@ -96,7 +96,7 @@ export function ContactSection() {
               </div>
 
               <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-normal text-[#202020] dark:text-[#f3f2f7] tracking-tight">
-                Establish Telepathic Link
+                CONTACT ME
               </h2>
 
               <p className="text-sm sm:text-base text-[#5e5953] dark:text-[#a9a5b8] font-sans font-light leading-relaxed">
@@ -120,7 +120,7 @@ export function ContactSection() {
                 </div>
                 <div>
                   <span className="text-xs font-bold text-[#202020] dark:text-[#f3f2f7] block">
-                    TELEPATHIC CRYSTAL ACTIVE
+                    TELEPATHIC CRYSTAL ACTIVE (TIME)
                   </span>
                   <span className="text-[10px] sm:text-[11px] font-mono text-[#8f8880] dark:text-[#736f82] block">
                     Available for Q2/Q3 2026 Quests & Guild Expeditions
