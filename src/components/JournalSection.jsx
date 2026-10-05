@@ -19,8 +19,20 @@ import {
   Feather, 
   BookMarked, 
   Compass, 
-  SlidersHorizontal
+  SlidersHorizontal,
+  Scroll
 } from "lucide-react";
+
+// Category-to-icon helper for story genres
+const getCategoryIcon = (category = "") => {
+  const c = category.toLowerCase();
+  if (c.includes("short")) return BookMarked;
+  if (c.includes("long") || c.includes("novel") || c.includes("book")) return BookOpen;
+  if (c.includes("poem") || c.includes("verse") || c.includes("poetry")) return Feather;
+  if (c.includes("essay") || c.includes("article") || c.includes("chronicle")) return SlidersHorizontal;
+  if (c.includes("script") || c.includes("play") || c.includes("screenplay")) return Scroll;
+  return BookOpen;
+};
 import { essays, GOOGLE_SHEETS_STORIES_URL } from "../data/journalData";
 import { StoryBookReaderModal } from "./StoryBookReaderModal";
 import { 
@@ -98,22 +110,50 @@ export function JournalSection() {
     }
   }, []);
 
-  // Filter items according to user request
-  const filteredEssays = storiesList.filter((item) => {
-    if (filter === "all") return true;
-    if (filter === "shortstory") return item.type === "shortstory";
-    if (filter === "longstory") return item.type === "longstory";
-    if (filter === "poem") return item.type === "poem";
-    if (filter === "essay") return item.type === "essay";
-    return true;
-  });
+  // Dynamically derive categories present in Google Sheets stories
+  const categoriesList = React.useMemo(() => {
+    const counts = {};
+    storiesList.forEach((story) => {
+      const cat = (story.category || "Story").trim();
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
 
-  // Calculate counts for tab badges
-  const allCount = storiesList.length;
-  const shortCount = storiesList.filter((e) => e.type === "shortstory").length;
-  const longCount = storiesList.filter((e) => e.type === "longstory").length;
-  const poemCount = storiesList.filter((e) => e.type === "poem").length;
-  const essayCount = storiesList.filter((e) => e.type === "essay").length;
+    const list = [
+      { id: "all", label: "All Works", count: storiesList.length, icon: Compass }
+    ];
+
+    Object.keys(counts).forEach((cat) => {
+      const id = cat.toLowerCase().replace(/[^a-z0-9]/g, "");
+      list.push({
+        id,
+        label: cat,
+        rawName: cat,
+        count: counts[cat],
+        icon: getCategoryIcon(cat)
+      });
+    });
+
+    return list;
+  }, [storiesList]);
+
+  // Keep filter valid if data updates
+  useEffect(() => {
+    if (filter !== "all" && !categoriesList.some((c) => c.id === filter)) {
+      setFilter("all");
+      setActiveIndex(0);
+    }
+  }, [categoriesList, filter]);
+
+  // Filter items according to active dynamic category
+  const filteredEssays = React.useMemo(() => {
+    if (filter === "all") return storiesList;
+    const target = filter.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return storiesList.filter((item) => {
+      const itemCat = (item.category || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      const itemType = (item.type || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      return itemCat === target || itemType === target;
+    });
+  }, [storiesList, filter]);
 
   const activeEssay = filteredEssays[activeIndex] || filteredEssays[0] || storiesList[0];
   
@@ -363,99 +403,31 @@ export function JournalSection() {
           </div>
         </div>
 
-        {/* Filter Pills (All, Short Story, Long Story, Poem, Essays) */}
+        {/* Dynamic Category Filter Pills derived from Google Sheet */}
         <div className="flex items-center justify-start sm:justify-center overflow-x-auto no-scrollbar gap-2 sm:gap-3 mb-8 sm:mb-12 py-1">
-          
-          {/* ALL FILTER */}
-          <button
-            onClick={() => handleFilterChange("all")}
-            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
-              filter === "all"
-                ? "bg-[#202020] dark:bg-white text-white dark:text-black border-transparent shadow-lg scale-105"
-                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-black/25 dark:hover:border-white/25"
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5" />
-            <span>All Works</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-              filter === "all" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
-            }`}>
-              {allCount}
-            </span>
-          </button>
-
-          {/* SHORT STORY FILTER */}
-          <button
-            onClick={() => handleFilterChange("shortstory")}
-            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
-              filter === "shortstory"
-                ? "bg-amber-600 dark:bg-amber-400 text-white dark:text-black border-transparent shadow-lg scale-105"
-                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-amber-500/40"
-            }`}
-          >
-            <BookMarked className="w-3.5 h-3.5" />
-            <span>Short Stories</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-              filter === "shortstory" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
-            }`}>
-              {shortCount}
-            </span>
-          </button>
-
-          {/* LONG STORY FILTER */}
-          <button
-            onClick={() => handleFilterChange("longstory")}
-            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
-              filter === "longstory"
-                ? "bg-sky-600 dark:bg-sky-400 text-white dark:text-black border-transparent shadow-lg scale-105"
-                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-sky-500/40"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Long Stories</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-              filter === "longstory" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
-            }`}>
-              {longCount}
-            </span>
-          </button>
-
-          {/* POEM FILTER */}
-          <button
-            onClick={() => handleFilterChange("poem")}
-            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
-              filter === "poem"
-                ? "bg-pink-600 dark:bg-pink-400 text-white dark:text-black border-transparent shadow-lg scale-105"
-                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-pink-500/40"
-            }`}
-          >
-            <Feather className="w-3.5 h-3.5" />
-            <span>Poems</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-              filter === "poem" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
-            }`}>
-              {poemCount}
-            </span>
-          </button>
-
-          {/* ESSAYS FILTER */}
-          <button
-            onClick={() => handleFilterChange("essay")}
-            className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
-              filter === "essay"
-                ? "bg-[#4b396f] dark:bg-[#b6a2c9] text-white dark:text-black border-transparent shadow-lg scale-105"
-                : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-[#b6a2c9]/40"
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Essays</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-              filter === "essay" ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
-            }`}>
-              {essayCount}
-            </span>
-          </button>
-
+          {categoriesList.map((cat) => {
+            const isSelected = filter === cat.id;
+            const IconComp = cat.icon || BookOpen;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => handleFilterChange(cat.id)}
+                className={`px-4 py-2 rounded-full text-xs font-mono font-medium transition-all duration-300 cursor-pointer flex items-center gap-2 shrink-0 border ${
+                  isSelected
+                    ? "bg-[#b18a79] dark:bg-[#e5c07b] text-white dark:text-black border-transparent shadow-lg scale-105 font-bold"
+                    : "bg-black/5 dark:bg-white/5 text-[#5e5953] dark:text-[#a9a5b8] border-black/10 dark:border-white/10 hover:border-[#b18a79]/40 dark:hover:border-[#e5c07b]/40"
+                }`}
+              >
+                <IconComp className="w-3.5 h-3.5" />
+                <span>{cat.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  isSelected ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+                }`}>
+                  {cat.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* 3D Coverflow Stage Area */}

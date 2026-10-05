@@ -165,13 +165,49 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
     }
   }, []);
 
+  // Dynamically derive project categories present in Google Sheets data
+  const dynamicProjectCategories = useMemo(() => {
+    const counts = {};
+    projectsList.forEach((p) => {
+      const rawCat = (p.category || "").trim() || "General";
+      counts[rawCat] = (counts[rawCat] || 0) + 1;
+    });
+
+    const list = [
+      { id: "all", label: "ALL PROJECTS", rawCategory: "all", count: projectsList.length }
+    ];
+
+    Object.keys(counts).forEach((cat) => {
+      const id = cat.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      list.push({
+        id,
+        label: cat.toUpperCase(),
+        rawCategory: cat,
+        count: counts[cat]
+      });
+    });
+
+    return list;
+  }, [projectsList]);
+
+  // Keep selectedCategory valid if data updates
+  useEffect(() => {
+    if (selectedCategory !== "all" && !dynamicProjectCategories.some((c) => c.id === selectedCategory)) {
+      setSelectedCategory("all");
+    }
+  }, [dynamicProjectCategories, selectedCategory]);
+
   // Filtered projects list
   const filteredProjects = useMemo(() => {
     if (selectedCategory === "all") return projectsList;
-    const catObj = projectCategories.find(c => c.id === selectedCategory);
-    const matchTerm = (catObj?.match || selectedCategory).toLowerCase();
-    return projectsList.filter(p => p.category.toLowerCase().includes(matchTerm));
-  }, [projectsList, selectedCategory]);
+    const catObj = dynamicProjectCategories.find((c) => c.id === selectedCategory);
+    if (!catObj) return projectsList;
+    const matchTerm = catObj.rawCategory.toLowerCase();
+    return projectsList.filter((p) => {
+      const pCat = (p.category || "").toLowerCase().trim();
+      return pCat === matchTerm || pCat.includes(matchTerm);
+    });
+  }, [projectsList, selectedCategory, dynamicProjectCategories]);
 
   // Layout calculation for the current filtered list (Project 0 always centered!)
   const layoutProjects = useMemo(() => {
@@ -389,19 +425,24 @@ export function ProjectsSection({ onOpenLivePreview, onOpenVideoDemo }) {
             </p>
           </div>
 
-          {/* Category Filter Pills */}
+          {/* Dynamic Category Filter Pills derived from Google Sheet */}
           <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/5 dark:bg-white/5 border border-[#dbd2c4] dark:border-white/10 overflow-x-auto no-scrollbar max-w-full">
-            {projectCategories.map((cat) => (
+            {dynamicProjectCategories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-mono whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-mono whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
                   selectedCategory === cat.id
                     ? "bg-[#b18a79] dark:bg-[#e5c07b] text-white dark:text-black font-bold shadow-[0_0_18px_rgba(229,192,123,0.35)] scale-102"
                     : "text-[#5e5953] dark:text-[#a9a5b8] hover:text-[#202020] dark:hover:text-[#e5c07b]"
                 }`}
               >
-                {cat.label}
+                <span>{cat.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  selectedCategory === cat.id ? "bg-white/20 dark:bg-black/20" : "bg-black/10 dark:bg-white/10"
+                }`}>
+                  {cat.count}
+                </span>
               </button>
             ))}
           </div>

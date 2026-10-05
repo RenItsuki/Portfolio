@@ -286,12 +286,14 @@ export function PhotoGallery({ onSelectPhoto, onPhotosLoaded }) {
   const totalPhotoPages = Math.ceil(filteredPhotos.length / photosPerPage) || 1;
   const currentPhotos = filteredPhotos.slice((photosPage - 1) * photosPerPage, photosPage * photosPerPage);
 
-  // Dynamic categories list with count helper
+  // Dynamic categories list with count helper (strictly derived from Google Sheets)
   const categoriesList = useMemo(() => {
     const list = [{ label: "All", count: photosList.length }];
     const counts = {};
     photosList.forEach((p) => {
-      const cat = p.category || "Scenery";
+      const rawCat = (p.category || "").trim();
+      if (!rawCat) return;
+      const cat = rawCat.charAt(0).toUpperCase() + rawCat.slice(1).toLowerCase();
       counts[cat] = (counts[cat] || 0) + 1;
     });
     Object.keys(counts).forEach((cat) => {
@@ -299,6 +301,13 @@ export function PhotoGallery({ onSelectPhoto, onPhotosLoaded }) {
     });
     return list;
   }, [photosList]);
+
+  // Keep selectedCategory valid if data updates
+  useEffect(() => {
+    if (selectedCategory !== "All" && !categoriesList.some((c) => c.label.toLowerCase() === selectedCategory.toLowerCase())) {
+      setSelectedCategory("All");
+    }
+  }, [categoriesList, selectedCategory]);
 
   const handleSelectAlbum = (album) => {
     setSelectedAlbum(album);

@@ -268,39 +268,43 @@ export function autoPaginateContent(title, subtitle, contentText) {
 }
 
 /**
- * Normalizes category/type to match our filters:
- * "shortstory" | "longstory" | "poem" | "essay"
+ * Converts any category string to clean Title Case (e.g. "short Story" -> "Short Story")
  */
-function normalizeStoryType(rawType = "") {
-  const t = rawType.toLowerCase().trim();
-  if (t.includes("long") || t.includes("serial") || t.includes("novel")) return "longstory";
-  if (t.includes("poem") || t.includes("verse") || t.includes("poetry")) return "poem";
-  if (t.includes("essay") || t.includes("article") || t.includes("chronicle")) return "essay";
-  return "shortstory"; // default to short story
+export function normalizeCategoryName(rawCategory = "", defaultCategory = "Story") {
+  if (!rawCategory || typeof rawCategory !== "string") return defaultCategory;
+  const trimmed = rawCategory.trim();
+  if (!trimmed) return defaultCategory;
+  return trimmed
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
 /**
- * Returns a human-friendly category label
+ * Normalizes category/type to a clean identifier slug
  */
-function getCategoryLabel(type) {
-  switch (type) {
-    case "longstory": return "Long Story";
-    case "poem": return "Poem";
-    case "essay": return "Essay";
-    default: return "Short Story";
-  }
+function normalizeStoryType(rawType = "") {
+  const label = normalizeCategoryName(rawType, "Story");
+  return label.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Returns a human-friendly category label directly from Google Sheet data
+ */
+function getCategoryLabel(rawType = "") {
+  return normalizeCategoryName(rawType, "Story");
 }
 
 /**
  * Assigns a default accent glow color based on category
  */
-function getDefaultAccentColor(type) {
-  switch (type) {
-    case "longstory": return "#38bdf8"; // Cyan
-    case "poem": return "#f472b6";      // Rose
-    case "essay": return "#a855f7";     // Purple
-    default: return "#d97746";          // Warm Amber
-  }
+function getDefaultAccentColor(type = "") {
+  const c = String(type).toLowerCase();
+  if (c.includes("long")) return "#38bdf8"; // Cyan
+  if (c.includes("poem") || c.includes("verse")) return "#f472b6"; // Rose
+  if (c.includes("essay") || c.includes("article")) return "#a855f7"; // Purple
+  if (c.includes("drama") || c.includes("script")) return "#f59e0b"; // Amber
+  return "#d97746"; // Warm Terracotta / Amber
 }
 
 /**
@@ -384,14 +388,14 @@ export async function fetchStoriesFromGoogleSheet(sheetUrlOrId) {
 
     const subtitle = getVal(row, "subtitle", "tagline", "subheading");
     const rawType = getVal(row, "category", "type", "tag", "genre");
+    const categoryLabel = getCategoryLabel(rawType);
     const normalizedType = normalizeStoryType(rawType);
-    const categoryLabel = getCategoryLabel(normalizedType);
 
     const rawLyrics = getVal(row, "summarylyrics", "lyrics", "summary", "beats");
     const excerpt = getVal(row, "excerpt", "description", "synopsis") || (content ? content.slice(0, 180) + "..." : "");
     const rawImage = getVal(row, "coverimage", "image", "cover", "photo", "img");
     const coverImage = normalizeGoogleDriveImageUrl(rawImage);
-    const accentColor = getVal(row, "accentcolor", "color", "accent") || getDefaultAccentColor(normalizedType);
+    const accentColor = getVal(row, "accentcolor", "color", "accent") || getDefaultAccentColor(categoryLabel);
     const date = getVal(row, "date", "published", "year") || "Recent Archive";
     const readTime = getVal(row, "readtime", "readingtime", "duration") || `${Math.max(2, Math.round(content.split(/\s+/).length / 200))} min read`;
 
